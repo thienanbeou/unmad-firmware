@@ -40,6 +40,9 @@ int main(void) {
   // Initialize the core modules
   analog_init();
   matrix_init();
+#if defined(BOOTMAGIC_KEY)
+  matrix_bootmagic();
+#endif
   hid_init();
   deferred_action_init();
   advanced_key_init();

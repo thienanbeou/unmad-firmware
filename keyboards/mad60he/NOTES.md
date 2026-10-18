@@ -93,6 +93,8 @@ cycle. At reset the bootloader reads it:
 So any firmware can enter the bootloader by writing 0x96969696 there and
 resetting (tested with a software reset and with a watchdog reset), and a
 firmware that resets before clearing the word lands in the bootloader too.
+This port also does it for Bootmagic Lite: Esc held while plugging in,
+judged on the raw sensor level after the startup calibration.
 This port clears it at boot and uses it for its rescue rules (crash, two
 boots in a row without USB, watchdog). RCC_CSR reset flags are sticky across
 these resets (the stock firmware never clears them).

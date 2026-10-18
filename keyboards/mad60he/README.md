@@ -38,13 +38,74 @@ You need: the keyboard plugged in by USB, Python 3, and the
 5. Configure it in the browser (Chrome, Edge or Brave):
    https://thienanbeou.github.io/unmad-configurator/. Keymap, per-key
    actuation and Rapid Trigger, tap dance and other advanced keys, macros,
-   lighting, WASD swap / Win lock / 6KRO.
+   lighting, WASD swap / Win lock / 6KRO, and from v1.1 Mac mode and the
+   Caps Lock indicator.
 
-What you get by default is the stock layout: ANSI 60%, Fn is the rightmost
-key of the bottom row, Fn + Esc / number row = `` ` `` and F1-F12, Fn + `/`,
-Right Alt, Menu, Right Ctrl = Up, Left, Down, Right, Fn + `\` = WASD swap,
-Fn + Left Win = Win lock, Fn + N = 6KRO, 1.5 mm actuation on every key. Not carried over from stock: the Fn + RGB keys
-(set lighting in the configurator) and Win/Mac mode.
+If the keyboard ever stops responding (firmware v1.1+): unplug it, hold
+**Esc**, plug it in and let go. It starts in the bootloader, ready for
+`fwtool.py flash`; a plain replug starts the firmware again.
+
+## Default keymap
+
+The stock layout (read from the official 1.06 firmware), 1.5 mm actuation
+on every key. Blank = transparent (the layer below shows through), `--` =
+no key: stock had its RGB controls there; set lighting in the
+configurator. Win/Mac mode is Fn + M as on stock (firmware v1.1; the v1.0
+release has nothing there). Generated from `keyboard.json`.
+
+```
+Layer 0 (base)
+,-----------------------------------------------------------------------------------------.
+| Esc |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  0  |  -  |  =  |    Bksp   |
+|-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----------|
+|  Tab   |  Q  |  W  |  E  |  R  |  T  |  Y  |  U  |  I  |  O  |  P  |  [  |  ]  |   \    |
+|--------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+--------|
+|   Caps  |  A  |  S  |  D  |  F  |  G  |  H  |  J  |  K  |  L  |  ;  |  '  |    Enter    |
+|---------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-------------|
+|    Shift    |  Z  |  X  |  C  |  V  |  B  |  N  |  M  |  ,  |  .  |  /  |     Shift     |
+|-------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+---------------|
+|  Ctrl | Win  | Alt  |                Space                |  Alt  | Menu | Ctrl |   Fn  |
+`-----------------------------------------------------------------------------------------'
+
+Layer 1 (Fn: hold the rightmost bottom key)
+,-----------------------------------------------------------------------------------------.
+|  `  |  F1 |  F2 |  F3 |  F4 |  F5 |  F6 |  F7 |  F8 |  F9 | F10 | F11 | F12 |           |
+|-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----------|
+|   --   |  -- |  -- |  -- |     |     |     |     |     |     |     |     |     |  WASD  |
+|--------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+--------|
+|         |  -- |  -- |  -- |     |     |     |     |     |     |     |     |             |
+|---------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-------------|
+|             |     |     |     |     |     | 6KRO| Mac |     |     |  Up |               |
+|-------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+---------------|
+|       |WinLk |      |                                     |  Left | Down |Right |       |
+`-----------------------------------------------------------------------------------------'
+
+Layer 2 (stock Mac base; not reachable by default)
+,-----------------------------------------------------------------------------------------.
+| Esc |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  0  |  -  |  =  |    Bksp   |
+|-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----------|
+|  Tab   |  Q  |  W  |  E  |  R  |  T  |  Y  |  U  |  I  |  O  |  P  |  [  |  ]  |   \    |
+|--------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+--------|
+|   Caps  |  A  |  S  |  D  |  F  |  G  |  H  |  J  |  K  |  L  |  ;  |  '  |    Enter    |
+|---------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-------------|
+|    Shift    |  Z  |  X  |  C  |  V  |  B  |  N  |  M  |  ,  |  .  |  /  |     Shift     |
+|-------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+---------------|
+|  Ctrl | Alt  | Win  |                Space                |  Win  | Alt  | Ctrl |  MO3  |
+`-----------------------------------------------------------------------------------------'
+
+Layer 3 (stock Mac Fn; not reachable by default)
+,-----------------------------------------------------------------------------------------.
+|  `  |  F1 |  F2 |  F3 |  F4 |  F5 |  F6 |  F7 |  F8 |  F9 | F10 | F11 | F12 |           |
+|-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----------|
+|   --   |  -- |  -- |  -- | LPad| Bri+| Bri-| Prev| Play| Next| Mute| Vol+| Vol-|  WASD  |
+|--------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+--------|
+|         |  -- |  -- |  -- |     |     |     |     |     |     |     |     |             |
+|---------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-------------|
+|             |     |     |     |     |     | 6KRO| Mac |     |     |  Up |               |
+|-------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+---------------|
+|       |      |      |                                     |  Left | Down |Right |       |
+`-----------------------------------------------------------------------------------------'
+```
 
 ## Going back to stock
 
@@ -87,12 +148,19 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   ADC count (fine enough for 0.05 mm actuation).
 - USB: OTG_HS core, embedded full-speed PHY (PB14/PB15).
 - RGB: 61 WS2812 on PC9 (driver `src/hardware/stm32f405xx/rgb.c`, effects
-  `src/rgb.c`: 21 QMK RGB Matrix effects, a colour range for the rainbow
-  effects, per-key colours), set at runtime with raw HID commands
-  0xE0-0xE3. Defaults in `config.h`: Rainbow Pinwheels (the stock "Colorful
+  `src/rgb.c`: all of QMK's RGB Matrix effects, 52 from v1.1 (21 in v1.0,
+  the stock list), a colour range for the rainbow effects, per-key colours),
+  set at runtime with raw HID commands 0xE0-0xE3. From v1.1 the Caps Lock key
+  lights white while Caps Lock is on (option bit 7 turns it off). Defaults in `config.h`: Rainbow Pinwheels (the stock "Colorful
   Swirls 2"), brightness 210 (the stock maximum; the ceiling is 255).
 - Stock switches: WASD swap, Win lock, 6KRO (option bits 3-5, keys
-  `SP_WASD_SWAP`, `SP_GUI_LOCK`, `SP_NKRO_TOGGLE`).
+  `SP_WASD_SWAP`, `SP_GUI_LOCK`, `SP_NKRO_TOGGLE`), and from v1.1 Mac mode
+  (Alt and Win swapped, bit 6, `SP_MAC_MODE`, the stock Win/Mac switch).
+- QMK features (v1.1): Grave Escape (`SP_GRAVE_ESCAPE`: Esc, `` ` `` with
+  Shift or Win, Esc again with Ctrl + Shift), Repeat Key (`SP_REPEAT_KEY`:
+  the last key with its modifiers), Bootmagic Lite (Esc held while plugging
+  in). QMK's `TG` (toggle a layer) is Layer Lock here: hold Fn and press
+  Layer Lock to keep layer 1 on, the same again to leave it.
 - Tap dance is an advanced key type of this fork (not in upstream libhmk);
   edit it in the Unmad configurator. Upstream hmkconf lists tap dances as "?"
   and corrupts them on save.

@@ -165,6 +165,12 @@ CONFIG_H = (BOARD / "config.h").read_text()
 if "rgb_slots" in syms:
     import re
     cfg = dict(re.findall(r"#define (RGB_\w+) (\S+)", CONFIG_H))
+    names = re.findall(r"^\s*RGB_EFFECT_(\w+)[ ,=]", (
+        REPO / "include" / "eeconfig.h").read_text(), re.M)
+    names = [n for n in names if n != "COUNT"]
+    NUM_EFFECTS = len(names)
+    # The number is stored: the stock list (0-20) must never move
+    assert names[13] == "RAINBOW_PINWHEELS" and names[20] == "SPLASH", names[:21]
     pts = [tuple(map(int, m)) for m in
            re.findall(r"\{(\d+), (\d+)\}", CONFIG_H[CONFIG_H.index("RGB_LED_POINTS"):CONFIG_H.index("RGB_LED_FLAGS")])]
     key_leds = list(map(int, re.findall(r"\d+", CONFIG_H[CONFIG_H.index("#define RGB_KEY_LEDS"):CONFIG_H.index("#define RGB_MATRIX_LEDS")])))
@@ -243,7 +249,7 @@ if "rgb_slots" in syms:
         b.run(syms["board_task"], 3_000_000)
 
     ok, out = command(0xE0)
-    assert ok and list(out[1:9]) == [13, 0, 255, 210, 70, 21, int(cfg["RGB_MAX_BRIGHTNESS"]), 255], f"GET_RGB {list(out[1:9])}"
+    assert ok and list(out[1:9]) == [13, 0, 255, 210, 70, NUM_EFFECTS, int(cfg["RGB_MAX_BRIGHTNESS"]), 255], f"GET_RGB {list(out[1:9])}"
     # Colour range: Rainbow Pinwheels folded into a band around hue 100
     # (frames 20 ms apart, the frame rate; later frames restart at TICK + 40,
     # which rgb_task's unsigned elapsed time also treats as due)
@@ -256,8 +262,8 @@ if "rgb_slots" in syms:
         assert got == want, f"pinwheels range {rng}: {bad(got, want)}"
     ok, out = command(0xE0)
     assert out[8] == 254, "readback of the colour range"
-    ok, _ = command(0xE1, 21, 0, 0, 0, 0)
-    assert not ok, "SET_RGB accepted effect 21 (out of range)"
+    ok, _ = command(0xE1, NUM_EFFECTS, 0, 0, 0, 0)
+    assert not ok, f"SET_RGB accepted effect {NUM_EFFECTS} (out of range)"
     ok, _ = command(0xE1, 2, 152, 195, 210, 70, 255)       # solid stock colour
     assert ok, "SET_RGB solid"
     frame(TICK + 40)
@@ -288,10 +294,12 @@ if "rgb_slots" in syms:
     # press (A = key 29) with light around that key's LED.
     from unicorn.arm_const import UC_ARM_REG_PC
     KEY_A, IS_PRESSED = 29, 9
-    names = re.findall(r"^\s*RGB_EFFECT_(\w+)[ ,=]", (
-        REPO / "include" / "eeconfig.h").read_text(), re.M)
-    names = [n for n in names if n != "COUNT"]
-    assert len(names) == 21, names
+    # Dark at rest, lit around a pressed key
+    REACTIVE = {"SOLID_REACTIVE_SIMPLE", "SOLID_REACTIVE_MULTICROSS", "SPLASH",
+                "SOLID_REACTIVE_CROSS", "SOLID_REACTIVE_WIDE", "SOLID_REACTIVE_MULTIWIDE",
+                "SOLID_REACTIVE_NEXUS", "SOLID_REACTIVE_MULTINEXUS", "MULTISPLASH",
+                "SOLID_SPLASH", "SOLID_MULTISPLASH", "TYPING_HEATMAP"}
+    assert REACTIVE <= set(names), REACTIVE - set(names)
     tick = TICK + 1000
     summary = []
     for effect, name in enumerate(names):
@@ -331,7 +339,16 @@ if "rgb_slots" in syms:
                         assert bb >= g and bb >= r_, f"digital rain not blue {(r_, g, bb)}"
                         seen += 1
             assert seen, "blue digital rain stayed dark"
-        if name in ("SOLID_REACTIVE_SIMPLE", "SOLID_REACTIVE_MULTICROSS", "SPLASH"):
+        if name == "PIXEL_FRACTAL":
+            # Pixels enter in the middle every ~0.3 s at this speed
+            most = 0
+            for _ in range(50):
+                tick += 40
+                frame(tick)
+                most = max(most, sum(1 for c in leds() if c != (0, 0, 0)))
+            assert most > 0, "pixel fractal stayed dark"
+            lit.append(most)
+        if name in REACTIVE:
             # Let earlier hits expire (the tracker drops them after ~65 s)
             tick += 70_000
             frame(tick)
@@ -349,7 +366,47 @@ if "rgb_slots" in syms:
             assert got[led] != (0, 0, 0), f"{name}: pressed key's LED dark"
             lit.append(sum(1 for c in got if c != (0, 0, 0)))
         summary.append(f"{name.lower()} {lit[-1]}")
-    print("11 effects: all 21 render and return; LEDs lit per effect: " + ", ".join(summary))
+    print(f"11 effects: all {NUM_EFFECTS} render and return; LEDs lit per effect: " + ", ".join(summary))
+
+    # 11b. Caps Lock indicator: the Caps key's LED white while the host's Caps
+    # Lock is on, over any effect (also Off), never below brightness 64; off
+    # with option bit 7; when it goes off the effect redraws that LED
+    if "led_state" in syms:
+        OPTIONS = b.r32(syms["eeconfig"]) + 132
+        caps = key_leds[int(cfg["RGB_CAPS_LOCK_KEY"])]
+
+        def options(bits):
+            b.uc.mem_write(OPTIONS, bits.to_bytes(2, "little"))
+        opts = int.from_bytes(bytes(b.uc.mem_read(OPTIONS, 2)), "little")
+        ok, _ = command(0xE1, 0, 0, 0, 210, 128, 255)               # Off
+        b.uc.mem_write(syms["led_state"], b"\x02")
+        tick += 40
+        frame(tick)
+        got = leds()
+        assert got[caps] == (210, 210, 210) and sum(c != (0, 0, 0) for c in got) == 1, "caps on, effect Off"
+        options(opts | 1 << 7)
+        tick += 40
+        frame(tick)
+        assert all(c == (0, 0, 0) for c in leds()), "indicator disabled but lit"
+        options(opts)
+        ok, _ = command(0xE1, 0, 0, 0, 0, 128, 255)                 # brightness 0
+        tick += 40
+        frame(tick)
+        assert leds()[caps] == (64, 64, 64), "indicator below the minimum brightness"
+        # Raindrops repaints one LED at a time: the redraw on Caps off must
+        # still clear the white
+        ok, _ = command(0xE1, names.index("RAINDROPS"), 85, 255, 210, 0, 255)
+        tick += 40
+        frame(tick)
+        assert leds()[caps] == (210, 210, 210), "caps over Raindrops"
+        b.uc.mem_write(syms["led_state"], b"\x00")
+        tick += 40
+        frame(tick)
+        assert leds()[caps] != (210, 210, 210), "white stayed after Caps Lock off"
+        print("11b Caps Lock indicator: white on the Caps key over any effect (min "
+              "brightness 64), off with option bit 7, cleared by a redraw when it goes off")
+    else:
+        print("11b Caps Lock indicator: not in this build")
 else:
     print("10 RGB: not in this build")
 
@@ -432,4 +489,19 @@ if "board_install_bootloader" in syms:
           "unstaged data refused before any erase; staging bounds hold")
 else:
     print("13 bootloader install: not in this build")
+
+# 14. Bootmagic Lite: Esc (key 0) held at power-up -> bootloader, judged on the
+# filtered ADC level after the rest calibration (config.h BOOTMAGIC_MIN_ADC)
+if "matrix_bootmagic" in syms:
+    import re
+    level = int(re.search(r"#define BOOTMAGIC_MIN_ADC (\d+)", (BOARD / "config.h").read_text())[1])
+    for adc, enter in ((2200, False), (level - 1, False), (level, True), (2960, True)):
+        r = boot(start=syms["matrix_bootmagic"], ram={syms["key_matrix"]: adc}, count=20_000)
+        reset = any(AIRCR_RESET(a, v) for a, v in r["log"])
+        assert reset == enter, f"bootmagic at ADC {adc}: reset={reset}"
+        assert not enter or r["r32"](FLAG) == BOOT_MAGIC, "bootmagic reset without the flag"
+    print(f"14 Bootmagic Lite: Esc at ADC >= {level} after calibration -> marker + reset "
+          "(bootloader); rest level and just below keep booting")
+else:
+    print("14 Bootmagic Lite: not in this build")
 print("all ok")

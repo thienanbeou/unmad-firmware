@@ -120,3 +120,15 @@ void matrix_scan(void);
  * @return None
  */
 void matrix_disable_rapid_trigger(uint8_t key, bool disable);
+
+#if defined(BOOTMAGIC_KEY)
+/**
+ * @brief Bootmagic Lite: enter the bootloader if `BOOTMAGIC_KEY` is held
+ *
+ * Call after `matrix_init`. The rest calibration takes a held key as its rest,
+ * so this compares the filtered ADC level with `BOOTMAGIC_MIN_ADC` instead.
+ *
+ * @return None
+ */
+void matrix_bootmagic(void);
+#endif

@@ -71,6 +71,19 @@
    {52, 255, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 255, 41}, \
    {53, 54, 55, 255, 255, 255, 56, 255, 255, 255, 57, 58, 59, 60}}
 
+// Caps Lock indicator (v1.1): this key's LED lights white while the host's
+// Caps Lock is on (key 28 = the Caps Lock position). Off in the configurator
+// (option bit caps_indicator_disabled).
+#define RGB_CAPS_LOCK_KEY 28
+
+// Bootmagic Lite (v1.1): hold Esc (key 0) while plugging in -> bootloader.
+// Checked after the rest calibration on the filtered ADC level, since a key
+// held at power-up calibrates as its own rest. Inverted 12-bit values here:
+// about 2040-2240 at rest, 2940-2980 bottomed out (all 61 keys, 2026-10-17);
+// 2600 sits in the middle of the gap.
+#define BOOTMAGIC_KEY 0
+#define BOOTMAGIC_MIN_ADC 2600
+
 // Bring-up only, off for daily use (a PC asleep at power-up would otherwise
 // send the board to the bootloader):
 // #define BOARD_RESCUE_NO_USB_MS 10000

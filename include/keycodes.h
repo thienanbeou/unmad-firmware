@@ -208,6 +208,12 @@ typedef enum {
   SP_WASD_SWAP = 0xF0,
   SP_GUI_LOCK = 0xF1,
   SP_NKRO_TOGGLE = 0xF2,
+  // QMK features (v1.1): Grave Escape (Esc, or ` with Shift / GUI held),
+  // Repeat Key (the last key again, with its modifiers), and the Mac mode
+  // switch (option bit, Alt and GUI swapped)
+  SP_GRAVE_ESCAPE = 0xF3,
+  SP_REPEAT_KEY = 0xF4,
+  SP_MAC_MODE = 0xF5,
 
   XXXXXXX = KC_NO,
   _______ = KC_TRANSPARENT,

@@ -30,6 +30,43 @@ static uint16_t system_report;
 static uint16_t consumer_report;
 static hid_mouse_report_t mouse_report;
 
+// Keyboard LEDs set by the host
+static uint8_t led_state;
+// Repeat Key: the last key pressed and the modifiers held with it
+static uint8_t last_keycode = KC_NO, last_modifiers;
+// What Repeat Key and Grave Escape pressed, to release the same
+static uint8_t repeat_keycode = KC_NO, repeat_modifiers;
+static uint8_t grave_escape_keycode = KC_NO;
+
+// HID modifier bits
+#define HID_MOD_CTRL 0x11
+#define HID_MOD_SHIFT 0x22
+#define HID_MOD_GUI 0x88
+
+/**
+ * @brief Swap Alt and GUI in Mac mode
+ *
+ * @param keycode Keycode
+ *
+ * @return Keycode to use
+ */
+static uint8_t hid_mac_swap(uint8_t keycode) {
+  if (!eeconfig->options.mac_mode_enabled)
+    return keycode;
+  switch (keycode) {
+  case KC_LEFT_ALT:
+    return KC_LEFT_GUI;
+  case KC_LEFT_GUI:
+    return KC_LEFT_ALT;
+  case KC_RIGHT_ALT:
+    return KC_RIGHT_GUI;
+  case KC_RIGHT_GUI:
+    return KC_RIGHT_ALT;
+  default:
+    return keycode;
+  }
+}
+
 #if !defined(HID_DISABLED)
 /**
  * @brief Send the keyboard report
@@ -102,6 +139,7 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
 void hid_init(void) {}
 
 void hid_keycode_add(uint8_t keycode) {
+  keycode = hid_mac_swap(keycode);
   const uint16_t hid_code = keycode_to_hid[keycode];
 
   if (!hid_code)
@@ -134,6 +172,8 @@ void hid_keycode_add(uint8_t keycode) {
     // as padding; it is for the BIOS boot protocol), so in 6KRO mode the
     // bitmap holds just the keys that made it into the 6-key list
     kb_report.bitmap[hid_code / 8] |= 1 << (hid_code & 7);
+    last_keycode = keycode;
+    last_modifiers = kb_report.modifiers;
     break;
 
   case MODIFIER_KEYCODE_RANGE:
@@ -162,6 +202,7 @@ void hid_keycode_add(uint8_t keycode) {
 }
 
 void hid_keycode_remove(uint8_t keycode) {
+  keycode = hid_mac_swap(keycode);
   const uint16_t hid_code = keycode_to_hid[keycode];
 
   if (!hid_code)
@@ -208,6 +249,43 @@ void hid_keycode_remove(uint8_t keycode) {
   }
 }
 
+void hid_grave_escape_press(void) {
+  const uint8_t mods = kb_report.modifiers;
+  grave_escape_keycode =
+      (mods & (HID_MOD_SHIFT | HID_MOD_GUI)) && !(mods & HID_MOD_CTRL)
+          ? KC_GRAVE
+          : KC_ESCAPE;
+  hid_keycode_add(grave_escape_keycode);
+}
+
+void hid_grave_escape_release(void) {
+  hid_keycode_remove(grave_escape_keycode);
+  grave_escape_keycode = KC_NO;
+}
+
+void hid_repeat_press(void) {
+  if (last_keycode == KC_NO)
+    return;
+  // Add the modifiers that were held with the key and are not held now. They
+  // are report bits already (after Mac mode and Win lock), so set them
+  // directly rather than through hid_keycode_add.
+  repeat_modifiers = last_modifiers & ~kb_report.modifiers;
+  kb_report.modifiers |= repeat_modifiers;
+  repeat_keycode = last_keycode;
+  hid_keycode_add(repeat_keycode);
+}
+
+void hid_repeat_release(void) {
+  if (repeat_keycode == KC_NO)
+    return;
+  hid_keycode_remove(repeat_keycode);
+  kb_report.modifiers &= ~repeat_modifiers;
+  repeat_keycode = KC_NO;
+  repeat_modifiers = 0;
+}
+
+uint8_t hid_get_led_state(void) { return led_state; }
+
 void hid_send_reports(void) {
 #if !defined(HID_DISABLED)
   if (tud_suspended())
@@ -245,6 +323,10 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
   if (instance == USB_ITF_RAW_HID && report_id == 0 &&
       report_type == HID_REPORT_TYPE_OUTPUT)
     command_enqueue(buffer, bufsize);
+  else if (instance == USB_ITF_KEYBOARD &&
+           report_type == HID_REPORT_TYPE_OUTPUT && bufsize >= 1)
+    // The keyboard report has no report ID: one byte of LED bits
+    led_state = buffer[0];
 }
 
 void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,

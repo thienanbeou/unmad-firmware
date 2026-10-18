@@ -44,6 +44,7 @@ MACROS = {
            ("tap", "LEFT", 0)],
     "SHIFT+9": [("press", "LEFT_SHIFT", 0), ("press", "9", 0)],
 }
+GESC_C, REPEAT_V, LLOCK_B = 44, 45, 46   # Fn + C, Fn + V, Fn + B
 FIXTURE = [   # (type, layer, key, ...)
     ("tap_dance", 1, TD0_A, "LEFT_BRACKET", None, "M4", None),
     ("macro", 1, M0_D, "M0"),
@@ -51,7 +52,8 @@ FIXTURE = [   # (type, layer, key, ...)
     ("tap_dance", 1, TD2_N, "HOME", None, "PAGE_UP", None),
     ("null_bind", 0, A, D),
 ]
-KEYMAP = [(1, RBRC_S, "RIGHT_BRACKET")]   # (layer, key, keycode)
+KEYMAP = [(1, RBRC_S, "RIGHT_BRACKET"), (1, GESC_C, "SP_GRAVE_ESCAPE"),
+          (1, REPEAT_V, "SP_REPEAT_KEY"), (1, LLOCK_B, "SP_LAYER_LOCK")]   # (layer, key, keycode)
 SET_KEYMAP, SET_ADVANCED_KEYS, SET_MACROS = 129, 133, 141
 ACTION = {"press": 1, "tap": 2, "release": 3}
 MACRO_NONE, AK_TAP_DANCE, AK_MACRO, AK_NULL_BIND, NB_DISTANCE = 0xFF, 6, 5, 1, 4
@@ -316,6 +318,70 @@ for kc, bit in ((0xF0, OPT_WASD), (0xF1, OPT_GUI), (0xF2, OPT_6KRO)):
     seen.append((on == bit, get_options() & bit == 0))
 check("16 SP_WASD_SWAP / SP_GUI_LOCK / SP_NKRO_TOGGLE toggle their bit on and off", [],
       all(a and b_ for a, b_ in seen) and get_options() == base)
+
+# 17-20. v1.1 (QMK free wins): Grave Escape, Repeat Key, Mac mode, TG via Toggle.
+# Checked on the keyboard report the host reads (modifiers byte 0, bitmap 8-27).
+L_SHIFT, L_CTRL, L_WIN, L_ALT, KEY_1, KEY_S = 41, 53, 54, 55, 1, 30
+OPT_MAC = 1 << 6
+HID_ESC, HID_GRAVE, HID_A, HID_1, HID_S, HID_RBRC = 0x29, 0x35, 0x04, 0x1E, 0x16, 0x30
+
+
+def report(keys, at, fn=True, options=None):
+    store = []
+    play(keys, max(at) + 60, fn=fn, options=options,
+         probe=lambda t: store.append(bytes(b.uc.mem_read(S["kb_report"], 28))) if t in at else None)
+    return store
+
+
+def keys_in(r):
+    return {h for h in range(160) if bit(r, h)}
+
+
+bit = lambda r, h: r[8 + h // 8] >> (h & 7) & 1   # noqa: E731
+# Grave Escape (Fn + C): Esc; ` with Shift or Win; Esc again with Ctrl + Shift
+alone, shifted, ctrl_shift, win = (
+    report({GESC_C: [(20, 60)]}, [40, 100]),
+    report({L_SHIFT: [(10, 70)], GESC_C: [(20, 60)]}, [40, 100]),
+    report({L_CTRL: [(5, 70)], L_SHIFT: [(10, 70)], GESC_C: [(20, 60)]}, [40]),
+    # Win before Fn: with Fn held, the stock Fn layer makes that key Win lock
+    report({L_WIN: [(5, 70)], FN: [(10, 70)], GESC_C: [(20, 60)]}, [40], fn=False))
+check("17 Grave Escape: Esc, ` with Shift or Win, Esc with Ctrl+Shift, released after", [],
+      keys_in(alone[0]) == {HID_ESC} and keys_in(alone[1]) == set()
+      and keys_in(shifted[0]) == {HID_GRAVE} and keys_in(shifted[1]) == set()
+      and keys_in(ctrl_shift[0]) == {HID_ESC} and keys_in(win[0]) == {HID_GRAVE})
+
+# Repeat Key (Fn + V): the last key again; Shift + 1 repeats as Shift + 1 after
+# Shift is let go, and both are released with the Repeat key
+plain = report({A: [(20, 40)], FN: [(60, 120)], REPEAT_V: [(80, 100)]}, [90, 110], fn=False)
+shift1 = report({L_SHIFT: [(10, 50)], KEY_1: [(20, 40)], FN: [(60, 120)], REPEAT_V: [(80, 100)]},
+                [70, 90, 110], fn=False)
+check("18 Repeat Key: repeats A; repeats Shift+1 with Shift; all released after", [],
+      keys_in(plain[0]) == {HID_A} and keys_in(plain[1]) == set()
+      and shift1[0][0] == 0 and shift1[1][0] == 0x02 and keys_in(shift1[1]) == {HID_1}
+      and shift1[2][0] == 0 and keys_in(shift1[2]) == set())
+
+# Mac mode (option bit 6): Left Alt sends GUI, Left Win sends Alt
+mac_alt = report({L_ALT: [(20, 60)]}, [40], fn=False, options=base | OPT_MAC)
+mac_win = report({L_WIN: [(20, 60)]}, [40], fn=False, options=base | OPT_MAC)
+win_alt = report({L_ALT: [(20, 60)]}, [40], fn=False, options=base)
+b.restore(snap)
+set_options(base)
+b.run(S["layout_register"], count=2_000_000, args=(0, KC["SP_MAC_MODE"]), reset_sp=True)
+mac_on = get_options() & OPT_MAC
+b.run(S["layout_register"], count=2_000_000, args=(0, KC["SP_MAC_MODE"]), reset_sp=True)
+check("19 Mac mode: Alt -> GUI and Win -> Alt; normal without it; SP_MAC_MODE toggles bit 6", [],
+      mac_alt[0][0] == 0x08 and mac_win[0][0] == 0x04 and win_alt[0][0] == 0x04
+      and mac_on == OPT_MAC and get_options() & OPT_MAC == 0)
+
+# QMK's TG(1) here: Layer Lock (upstream libhmk). Fn + Layer Lock keeps layer 1
+# on after Fn is released (S types layer 1's ]); Fn + Layer Lock again ends it.
+# (A Toggle advanced key holding MO(1) cannot do this: advanced keys do not
+# fall through to lower layers, so on layer 1 the key is layer 1's keycode.)
+ll = report({FN: [(10, 50), (300, 350)], LLOCK_B: [(20, 40), (310, 330)], KEY_S: [(100, 140), (400, 440)]},
+            [120, 420], fn=False)
+plain_s = report({KEY_S: [(100, 140)]}, [120], fn=False)
+check("20 TG via Layer Lock: layer 1 stays on after Fn is released, off after the next lock", [],
+      keys_in(ll[0]) == {HID_RBRC} and keys_in(ll[1]) == {HID_S} and keys_in(plain_s[0]) == {HID_S})
 
 print("all ok" if ok else "FAILED")
 sys.exit(0 if ok else 1)

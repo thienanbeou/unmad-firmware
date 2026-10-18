@@ -20,6 +20,7 @@
 #include "commands.h"
 #include "eeconfig.h"
 #include "hardware/hardware.h"
+#include "hid.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
 
@@ -451,10 +452,15 @@ static void effect_solid_reactive_simple(void) {
   }
 }
 
-// QMK SOLID_REACTIVE_MULTICROSS and SPLASH on effect_runner_reactive_splash
+// QMK SOLID_REACTIVE_CROSS / MULTICROSS and SPLASH / MULTISPLASH on
+// effect_runner_reactive_splash (the single versions use only the latest hit)
 static void effect_reactive_splash(rgb_effect_t effect) {
+  const bool splash =
+      effect == RGB_EFFECT_SPLASH || effect == RGB_EFFECT_MULTISPLASH;
   const uint8_t start =
-      effect == RGB_EFFECT_SPLASH ? qsub8(hits.count, 1) : 0;
+      effect == RGB_EFFECT_SPLASH || effect == RGB_EFFECT_SOLID_REACTIVE_CROSS
+          ? qsub8(hits.count, 1)
+          : 0;
   for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
     hsv_t hsv = base;
     hsv.v = 0;
@@ -465,7 +471,7 @@ static void effect_reactive_splash(rgb_effect_t effect) {
       const uint8_t dist = sqrt16(dx * dx + dy * dy);
       const uint16_t tick = scale16by8(hits.tick[j], qadd8(speed, 1));
       uint16_t e;
-      if (effect == RGB_EFFECT_SPLASH) {
+      if (splash) {
         e = tick - dist;
         if (e > 255)
           e = 255;
@@ -486,6 +492,379 @@ static void effect_reactive_splash(rgb_effect_t effect) {
     hsv.h = rainbow_hue(offset);
     hsv.v = scale8(hsv.v, base.v);
     set_hsv(i, hsv);
+  }
+}
+
+//--------------------------------------------------------------------+
+// The rest of QMK's effects (v1.1), ported from qmk_firmware 180f394b48
+// (quantum/rgb_matrix/animations). Effects that sweep the colour wheel go
+// through rainbow_hue like the stock ones, so the colour range works on them
+// (at 255 it gives QMK's hues, turned by the base hue).
+//--------------------------------------------------------------------+
+
+typedef hsv_t (*i_f)(hsv_t hsv, uint8_t i, uint8_t time);
+typedef hsv_t (*dx_dy_f)(hsv_t hsv, int16_t dx, int16_t dy, uint8_t time);
+typedef hsv_t (*dist_f)(hsv_t hsv, int16_t dx, int16_t dy, uint8_t dist,
+                        uint8_t time);
+typedef hsv_t (*sin_cos_i_f)(hsv_t hsv, int8_t sin_v, int8_t cos_v, uint8_t i,
+                             uint8_t time);
+typedef hsv_t (*splash_f)(hsv_t hsv, int16_t dx, int16_t dy, uint8_t dist,
+                          uint16_t tick);
+
+// QMK effect_runner_i
+static void runner_i(i_f f) {
+  const uint8_t time = runner_i_time();
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+    set_hsv(i, f(base, i, time));
+}
+
+// QMK effect_runner_dx_dy
+static void runner_dx_dy(dx_dy_f f) {
+  const uint8_t time = runner_dx_dy_time();
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+    set_hsv(i, f(base, led_points[i][0] - center_x,
+                 led_points[i][1] - center_y, time));
+}
+
+// QMK effect_runner_dx_dy_dist
+static void runner_dist(dist_f f) {
+  const uint8_t time = runner_dx_dy_time();
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
+    const int16_t dx = led_points[i][0] - center_x;
+    const int16_t dy = led_points[i][1] - center_y;
+    set_hsv(i, f(base, dx, dy, sqrt16(dx * dx + dy * dy), time));
+  }
+}
+
+// QMK effect_runner_sin_cos_i (it passes cos_value as the effect's `sin` and
+// sin_value as its `cos`)
+static void runner_sin_cos_i(sin_cos_i_f f) {
+  const uint16_t time = scale16by8(rgb_timer, speed / 4);
+  const int8_t cos_value = cos8(time) - 128;
+  const int8_t sin_value = sin8(time) - 128;
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+    set_hsv(i, f(base, cos_value, sin_value, i, time));
+}
+
+// QMK effect_runner_reactive_splash
+static void runner_splash(uint8_t start, splash_f f) {
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
+    hsv_t hsv = base;
+    hsv.v = 0;
+    for (uint8_t j = start; j < hits.count; j++) {
+      const int16_t dx = led_points[i][0] - hits.x[j];
+      const int16_t dy = led_points[i][1] - hits.y[j];
+      hsv = f(hsv, dx, dy, sqrt16(dx * dx + dy * dy),
+              scale16by8(hits.tick[j], qadd8(speed, 1)));
+    }
+    hsv.v = scale8(hsv.v, base.v);
+    set_hsv(i, hsv);
+  }
+}
+
+static hsv_t band_pinwheel_val(hsv_t hsv, int16_t dx, int16_t dy,
+                               uint8_t time) {
+  hsv.v = scale8(hsv.v - time - atan2_8(dy, dx) * 3, hsv.v);
+  return hsv;
+}
+
+static hsv_t band_spiral_val(hsv_t hsv, int16_t dx, int16_t dy, uint8_t dist,
+                             uint8_t time) {
+  hsv.v = scale8(hsv.v + dist - time - atan2_8(dy, dx), hsv.v);
+  return hsv;
+}
+
+static hsv_t cycle_left_right(hsv_t hsv, uint8_t i, uint8_t time) {
+  hsv.h = rainbow_hue(led_points[i][0] - time);
+  return hsv;
+}
+
+static hsv_t cycle_up_down(hsv_t hsv, uint8_t i, uint8_t time) {
+  hsv.h = rainbow_hue(led_points[i][1] - time);
+  return hsv;
+}
+
+static hsv_t rainbow_moving_chevron(hsv_t hsv, uint8_t i, uint8_t time) {
+  hsv.h = rainbow_hue(abs8(led_points[i][1] - center_y) +
+                      (led_points[i][0] - time));
+  return hsv;
+}
+
+static hsv_t cycle_out_in(hsv_t hsv, int16_t dx, int16_t dy, uint8_t dist,
+                          uint8_t time) {
+  hsv.h = rainbow_hue(3 * dist / 2 + time);
+  return hsv;
+}
+
+static hsv_t cycle_out_in_dual(hsv_t hsv, int16_t dx, int16_t dy,
+                               uint8_t time) {
+  dx = (center_x / 2) - abs8(dx);
+  const uint8_t dist = sqrt16(dx * dx + dy * dy);
+  hsv.h = rainbow_hue(3 * dist + time);
+  return hsv;
+}
+
+static hsv_t cycle_spiral(hsv_t hsv, int16_t dx, int16_t dy, uint8_t dist,
+                          uint8_t time) {
+  hsv.h = rainbow_hue(dist - time - atan2_8(dy, dx));
+  return hsv;
+}
+
+static hsv_t dual_beacon(hsv_t hsv, int8_t sin_v, int8_t cos_v, uint8_t i,
+                         uint8_t time) {
+  hsv.h = rainbow_hue(((led_points[i][1] - center_y) * cos_v +
+                       (led_points[i][0] - center_x) * sin_v) /
+                      128);
+  return hsv;
+}
+
+static hsv_t rainbow_beacon(hsv_t hsv, int8_t sin_v, int8_t cos_v, uint8_t i,
+                            uint8_t time) {
+  hsv.h = rainbow_hue(((led_points[i][1] - center_y) * 2 * cos_v +
+                       (led_points[i][0] - center_x) * 2 * sin_v) /
+                      128);
+  return hsv;
+}
+
+static hsv_t hue_pendulum(hsv_t hsv, uint8_t i, uint8_t time) {
+  hsv.h = hsv.h + scale8(abs8(sin8(time) + led_points[i][0] - 128) * 2, 12);
+  return hsv;
+}
+
+// QMK STARLIGHT_SMOOTH: one random phase per LED, picked on first use
+static uint8_t phase_offsets[RGB_NUM_LEDS];
+
+static hsv_t starlight_smooth(hsv_t hsv, uint8_t i, uint8_t time) {
+  if (phase_offsets[i] == 0)
+    phase_offsets[i] = random8();
+  hsv.v = scale8(abs8(sin8((time + phase_offsets[i]) / 2) - 128) * 2, hsv.v);
+  return hsv;
+}
+
+static hsv_t riverflow(hsv_t hsv, uint8_t i, uint8_t time) {
+  time = scale16by8(rgb_timer + i * 315u, speed / 8);
+  hsv.v = scale8(abs8(sin8(time) - 128) * 2, hsv.v);
+  return hsv;
+}
+
+static hsv_t solid_reactive_wide(hsv_t hsv, int16_t dx, int16_t dy,
+                                 uint8_t dist, uint16_t tick) {
+  uint16_t effect = tick + dist * 5;
+  if (effect > 255)
+    effect = 255;
+  hsv.h = rainbow_hue(scale16by8(rgb_timer, qadd8(speed, 8) >> 4));
+  hsv.v = qadd8(hsv.v, 255 - effect);
+  return hsv;
+}
+
+static hsv_t solid_reactive_nexus(hsv_t hsv, int16_t dx, int16_t dy,
+                                  uint8_t dist, uint16_t tick) {
+  uint16_t effect = tick - dist;
+  if (effect > 255)
+    effect = 255;
+  if (dist > 72)
+    effect = 255;
+  if ((dx > 8 || dx < -8) && (dy > 8 || dy < -8))
+    effect = 255;
+  // QMK first sets a time based hue, then overwrites it with this
+  hsv.h = base.h + dy / 4;
+  hsv.v = qadd8(hsv.v, 255 - effect);
+  return hsv;
+}
+
+static hsv_t solid_splash(hsv_t hsv, int16_t dx, int16_t dy, uint8_t dist,
+                          uint16_t tick) {
+  uint16_t effect = tick - dist;
+  if (effect > 255)
+    effect = 255;
+  hsv.v = qadd8(hsv.v, 255 - effect);
+  return hsv;
+}
+
+// Tick of the most recent hit on this LED, or `max_tick` (QMK
+// effect_runner_reactive)
+static uint16_t reactive_tick(uint8_t led, uint16_t max_tick) {
+  for (int8_t j = hits.count - 1; j >= 0; j--)
+    if (hits.index[j] == led && hits.tick[j] < max_tick)
+      return hits.tick[j];
+  return max_tick;
+}
+
+// QMK SOLID_REACTIVE on effect_runner_reactive
+static void effect_solid_reactive(void) {
+  const uint16_t max_tick = 65535 / qadd8(speed, 1);
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
+    uint16_t offset = scale16by8(reactive_tick(i, max_tick), qadd8(speed, 1));
+    if (offset > 255)
+      offset = 255;
+    hsv_t hsv = base;
+    hsv.h = rainbow_hue(scale16by8(rgb_timer, qadd8(speed, 8) >> 4) +
+                        scale8(255 - offset, 64));
+    set_hsv(i, hsv);
+  }
+}
+
+static void effect_raindrops(bool init) {
+  // QMK's deltaH is (int8_t)((hsv.h + 128) - hsv.h) / 4: the int expression is
+  // always 128, so -32 after the cast
+  const int8_t delta_h = -32;
+  if (init) {
+    for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+      set_hsv(i, (hsv_t){(uint8_t)(base.h + delta_h * random8_max(3)), base.s,
+                         base.v});
+  } else if (scale16by8(rgb_timer, qadd8(speed, 16)) % 10 == 0) {
+    const uint8_t led = random8_max(RGB_NUM_LEDS);
+    set_hsv(led, (hsv_t){(uint8_t)(base.h + delta_h * random8_max(3)), base.s,
+                         base.v});
+  }
+}
+
+// QMK STARLIGHT, STARLIGHT_DUAL_HUE and STARLIGHT_DUAL_SAT
+static void starlight_set(uint8_t i, rgb_effect_t effect) {
+  const uint16_t time = scale16by8(rgb_timer, speed / 8);
+  hsv_t hsv = base;
+  hsv.v = scale8(abs8(sin8(time) - 128) * 2, hsv.v);
+  if (effect == RGB_EFFECT_STARLIGHT_DUAL_HUE)
+    hsv.h = hsv.h + random8_max(31);
+  else if (effect == RGB_EFFECT_STARLIGHT_DUAL_SAT)
+    hsv.s = hsv.s + random8_max(31);
+  set_hsv(i, hsv);
+}
+
+static void effect_starlight(rgb_effect_t effect, bool init) {
+  if (init) {
+    for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+      starlight_set(i, effect);
+  } else if (scale16by8(rgb_timer, qadd8(speed, 5)) % 5 == 0) {
+    starlight_set(random8_max(RGB_NUM_LEDS), effect);
+  }
+}
+
+// A random colour, or dark half of the time (QMK PIXEL_RAIN / PIXEL_FLOW)
+static hsv_t pixel_hsv(void) {
+  if (random8() & 2)
+    return (hsv_t){0, 0, 0};
+  const uint8_t h = rainbow_hue(random8());
+  return (hsv_t){h, random8_min_max(127, 255), base.v};
+}
+
+static void effect_pixel_rain(bool init) {
+  static uint8_t index = 0;
+  static uint32_t timer = 0;
+  if (init)
+    index = random8_max(RGB_NUM_LEDS);
+  if (timer < rgb_timer) {
+    set_hsv(index, pixel_hsv());
+    index = random8_max(RGB_NUM_LEDS);
+    timer = rgb_timer + (2048u - scale16by8(1792, speed));
+  }
+}
+
+static void effect_pixel_flow(bool init) {
+  static rgb_t led[RGB_NUM_LEDS];
+  static uint32_t wait_timer = 0;
+  if (wait_timer > rgb_timer)
+    return;
+  if (init) {
+    set_all(0, 0, 0);
+    for (uint8_t j = 0; j < RGB_NUM_LEDS; j++)
+      led[j] = hsv_to_rgb(pixel_hsv());
+  }
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+    rgb_driver_set(i, led[i].r, led[i].g, led[i].b);
+  memmove(&led[0], &led[1], (RGB_NUM_LEDS - 1) * sizeof(rgb_t));
+  led[RGB_NUM_LEDS - 1] = hsv_to_rgb(pixel_hsv());
+  wait_timer = rgb_timer + 3000u / scale16by8(qadd8(speed, 16), 16);
+}
+
+static void effect_pixel_fractal(bool init) {
+  enum { MID_COL = RGB_MATRIX_COLS / 2 };
+  static bool lit[RGB_MATRIX_ROWS][MID_COL];
+  static uint32_t wait_timer = 0;
+  if (init) {
+    set_all(0, 0, 0);
+    memset(lit, 0, sizeof(lit));
+  }
+  if (rgb_timer <= wait_timer)
+    return;
+  const rgb_t on = hsv_to_rgb(base);
+  for (uint8_t row = 0; row < RGB_MATRIX_ROWS; row++) {
+    for (uint8_t col = 0; col < MID_COL; col++) {
+      const rgb_t c = lit[row][col] ? on : (rgb_t){0, 0, 0};
+      const uint8_t l = matrix_leds[row][col];
+      const uint8_t r = matrix_leds[row][RGB_MATRIX_COLS - 1 - col];
+      if (l != RGB_NO_LED)
+        rgb_driver_set(l, c.r, c.g, c.b);
+      if (r != RGB_NO_LED)
+        rgb_driver_set(r, c.r, c.g, c.b);
+    }
+    // Shift towards the outside, a new pixel enters in the middle
+    memmove(lit[row], lit[row] + 1, (MID_COL - 1) * sizeof(bool));
+    lit[row][MID_COL - 1] = !(random8() & 3);
+  }
+  wait_timer = rgb_timer + 3000u / scale16by8(qadd8(speed, 16), 16);
+}
+
+// QMK FLOWER_BLOOMING on its effect_runner_bloom: the lower half turns the
+// other way and swaps red and blue
+static void effect_flower_blooming(void) {
+  const uint8_t time = scale16by8(rgb_timer, qadd8(speed / 10, 1));
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
+    const bool lower = led_points[i][1] > center_y;
+    hsv_t hsv = base;
+    hsv.h = rainbow_hue(led_points[i][0] * 3 - led_points[i][1] * 3 +
+                        (lower ? time : -(int16_t)time));
+    const rgb_t rgb = hsv_to_rgb(hsv);
+    if (lower)
+      rgb_driver_set(i, rgb.b, rgb.g, rgb.r);
+    else
+      rgb_driver_set(i, rgb.r, rgb.g, rgb.b);
+  }
+}
+
+// QMK TYPING_HEATMAP with its default settings, kept per LED instead of per
+// matrix position (one LED per key on this board)
+#define HEATMAP_INCREASE_STEP 32
+#define HEATMAP_DECREASE_DELAY_MS 25
+#define HEATMAP_SPREAD 40
+#define HEATMAP_AREA_LIMIT 16
+
+static uint8_t heat[RGB_NUM_LEDS];
+
+// QMK process_rgb_matrix_typing_heatmap
+static void heatmap_hit(uint8_t led) {
+  heat[led] = qadd8(heat[led], HEATMAP_INCREASE_STEP);
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
+    if (i == led) {
+      heat[i] = qadd8(heat[i], HEATMAP_INCREASE_STEP);
+      continue;
+    }
+    const int16_t dx = led_points[i][0] - led_points[led][0];
+    const int16_t dy = led_points[i][1] - led_points[led][1];
+    const uint8_t distance = sqrt16(dx * dx + dy * dy);
+    if (distance <= HEATMAP_SPREAD)
+      heat[i] = qadd8(heat[i], M_MIN(qsub8(HEATMAP_SPREAD, distance),
+                                     HEATMAP_AREA_LIMIT));
+  }
+}
+
+static void effect_typing_heatmap(bool init) {
+  static uint32_t decrease_timer;
+  if (init) {
+    set_all(0, 0, 0);
+    memset(heat, 0, sizeof(heat));
+    decrease_timer = rgb_timer;
+  }
+  // QMK cools every key by 1 every 25 ms; frames here are 20 ms apart, so
+  // count the 25 ms steps that passed
+  const uint32_t steps =
+      (rgb_timer - decrease_timer) / HEATMAP_DECREASE_DELAY_MS;
+  decrease_timer += steps * HEATMAP_DECREASE_DELAY_MS;
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
+    const uint8_t val = heat[i];
+    set_hsv(i, (hsv_t){(uint8_t)(170 - qsub8(val, 85)), base.s,
+                       scale8((qadd8(170, val) - 170) * 3, base.v)});
+    heat[i] = qsub8(val, (uint8_t)M_MIN(steps, 255));
   }
 }
 
@@ -537,7 +916,94 @@ static void rgb_render(bool init) {
     break;
   case RGB_EFFECT_SOLID_REACTIVE_MULTICROSS:
   case RGB_EFFECT_SPLASH:
+  case RGB_EFFECT_SOLID_REACTIVE_CROSS:
+  case RGB_EFFECT_MULTISPLASH:
     effect_reactive_splash(cfg->effect);
+    break;
+  case RGB_EFFECT_BAND_PINWHEEL_VAL:
+    runner_dx_dy(band_pinwheel_val);
+    break;
+  case RGB_EFFECT_BAND_SPIRAL_VAL:
+    runner_dist(band_spiral_val);
+    break;
+  case RGB_EFFECT_CYCLE_LEFT_RIGHT:
+    runner_i(cycle_left_right);
+    break;
+  case RGB_EFFECT_CYCLE_UP_DOWN:
+    runner_i(cycle_up_down);
+    break;
+  case RGB_EFFECT_RAINBOW_MOVING_CHEVRON:
+    runner_i(rainbow_moving_chevron);
+    break;
+  case RGB_EFFECT_CYCLE_OUT_IN:
+    runner_dist(cycle_out_in);
+    break;
+  case RGB_EFFECT_CYCLE_OUT_IN_DUAL:
+    runner_dx_dy(cycle_out_in_dual);
+    break;
+  case RGB_EFFECT_CYCLE_SPIRAL:
+    runner_dist(cycle_spiral);
+    break;
+  case RGB_EFFECT_DUAL_BEACON:
+    runner_sin_cos_i(dual_beacon);
+    break;
+  case RGB_EFFECT_RAINBOW_BEACON:
+    runner_sin_cos_i(rainbow_beacon);
+    break;
+  case RGB_EFFECT_RAINDROPS:
+    effect_raindrops(init);
+    break;
+  case RGB_EFFECT_HUE_PENDULUM:
+    runner_i(hue_pendulum);
+    break;
+  case RGB_EFFECT_PIXEL_FRACTAL:
+    effect_pixel_fractal(init);
+    break;
+  case RGB_EFFECT_PIXEL_FLOW:
+    effect_pixel_flow(init);
+    break;
+  case RGB_EFFECT_PIXEL_RAIN:
+    effect_pixel_rain(init);
+    break;
+  case RGB_EFFECT_TYPING_HEATMAP:
+    effect_typing_heatmap(init);
+    break;
+  case RGB_EFFECT_SOLID_REACTIVE:
+    effect_solid_reactive();
+    break;
+  case RGB_EFFECT_SOLID_REACTIVE_WIDE:
+    runner_splash(qsub8(hits.count, 1), solid_reactive_wide);
+    break;
+  case RGB_EFFECT_SOLID_REACTIVE_MULTIWIDE:
+    runner_splash(0, solid_reactive_wide);
+    break;
+  case RGB_EFFECT_SOLID_REACTIVE_NEXUS:
+    runner_splash(qsub8(hits.count, 1), solid_reactive_nexus);
+    break;
+  case RGB_EFFECT_SOLID_REACTIVE_MULTINEXUS:
+    runner_splash(0, solid_reactive_nexus);
+    break;
+  case RGB_EFFECT_SOLID_SPLASH:
+    runner_splash(qsub8(hits.count, 1), solid_splash);
+    break;
+  case RGB_EFFECT_SOLID_MULTISPLASH:
+    runner_splash(0, solid_splash);
+    break;
+  case RGB_EFFECT_STARLIGHT:
+  case RGB_EFFECT_STARLIGHT_DUAL_HUE:
+  case RGB_EFFECT_STARLIGHT_DUAL_SAT:
+    effect_starlight(cfg->effect, init);
+    break;
+  case RGB_EFFECT_STARLIGHT_SMOOTH:
+    if (init)
+      memset(phase_offsets, 0, sizeof(phase_offsets));
+    runner_i(starlight_smooth);
+    break;
+  case RGB_EFFECT_RIVERFLOW:
+    runner_i(riverflow);
+    break;
+  case RGB_EFFECT_FLOWER_BLOOMING:
+    effect_flower_blooming();
     break;
   case RGB_EFFECT_OFF:
   default:
@@ -592,11 +1058,14 @@ void rgb_task(void) {
     started = true;
   }
 
-  // Key presses feed the reactive effects
+  // Key presses feed the reactive effects and the typing heatmap
   for (uint8_t k = 0; k < NUM_KEYS; k++) {
     const bool is_pressed = key_matrix[k].is_pressed;
-    if (is_pressed && !bitmap_get(pressed, k) && key_leds[k] != RGB_NO_LED)
+    if (is_pressed && !bitmap_get(pressed, k) && key_leds[k] != RGB_NO_LED) {
       rgb_add_hit(key_leds[k]);
+      if (eeconfig->rgb.effect == RGB_EFFECT_TYPING_HEATMAP)
+        heatmap_hit(key_leds[k]);
+    }
     bitmap_set(pressed, k, is_pressed);
   }
 
@@ -607,9 +1076,27 @@ void rgb_task(void) {
   last_frame = now;
   rgb_timer = now;
 
-  const bool init = eeconfig->rgb.effect != last_effect;
+  bool init = eeconfig->rgb.effect != last_effect;
   last_effect = eeconfig->rgb.effect;
+#if defined(RGB_CAPS_LOCK_KEY)
+  // Caps Lock indicator: drawn over the effect. When it goes off, redraw the
+  // whole effect, since some effects only touch a few LEDs per frame.
+  static bool caps_shown = false;
+  const bool caps = !eeconfig->options.caps_indicator_disabled &&
+                    (hid_get_led_state() & 0x02);
+  init |= caps_shown & !caps;
+  caps_shown = caps;
+#endif
   rgb_render(init);
+#if defined(RGB_CAPS_LOCK_KEY)
+  if (caps) {
+    // White at the set brightness, but always visible (also with the
+    // lighting off)
+    const uint8_t v =
+        M_MAX(M_MIN(eeconfig->rgb.val, RGB_MAX_BRIGHTNESS), 64);
+    rgb_driver_set(key_leds[RGB_CAPS_LOCK_KEY], v, v, v);
+  }
+#endif
 }
 
 //--------------------------------------------------------------------+

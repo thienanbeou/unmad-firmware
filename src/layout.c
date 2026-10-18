@@ -118,7 +118,8 @@ static uint8_t layout_wasd_swap(uint8_t keycode) {
 /**
  * @brief Toggle one of the stock switches stored in the options
  *
- * @param keycode `SP_WASD_SWAP`, `SP_GUI_LOCK` or `SP_NKRO_TOGGLE`
+ * @param keycode `SP_WASD_SWAP`, `SP_GUI_LOCK`, `SP_NKRO_TOGGLE` or
+ * `SP_MAC_MODE`
  *
  * @return None
  */
@@ -129,6 +130,8 @@ static void layout_toggle_option(uint8_t keycode) {
     options.wasd_swap_enabled ^= 1;
   else if (keycode == SP_GUI_LOCK)
     options.gui_lock_enabled ^= 1;
+  else if (keycode == SP_MAC_MODE)
+    options.mac_mode_enabled ^= 1;
   else
     options.nkro_disabled ^= 1;
   EECONFIG_WRITE(options, &options);
@@ -374,7 +377,18 @@ void layout_register(uint8_t key, uint8_t keycode) {
   case SP_WASD_SWAP:
   case SP_GUI_LOCK:
   case SP_NKRO_TOGGLE:
+  case SP_MAC_MODE:
     layout_toggle_option(keycode);
+    break;
+
+  case SP_GRAVE_ESCAPE:
+    hid_grave_escape_press();
+    should_send_reports = true;
+    break;
+
+  case SP_REPEAT_KEY:
+    hid_repeat_press();
+    should_send_reports = true;
     break;
 
   default:
@@ -389,6 +403,16 @@ void layout_unregister(uint8_t key, uint8_t keycode) {
   switch (keycode) {
   case HID_KEYCODE_RANGE:
     hid_keycode_remove(keycode);
+    should_send_reports = true;
+    break;
+
+  case SP_GRAVE_ESCAPE:
+    hid_grave_escape_release();
+    should_send_reports = true;
+    break;
+
+  case SP_REPEAT_KEY:
+    hid_repeat_release();
     should_send_reports = true;
     break;
 

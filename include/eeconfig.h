@@ -56,8 +56,14 @@ typedef union __attribute__((packed)) {
     bool wasd_swap_enabled : 1;
     bool gui_lock_enabled : 1;
     bool nkro_disabled : 1;
+    // Mac mode: Alt and GUI swapped on both sides (the stock WIN/MAC switch)
+    bool mac_mode_enabled : 1;
+    // Caps Lock indicator on the RGB off (stored inverted: on by default, and
+    // older configurations, whose reserved bits are 0, get it without a
+    // migration)
+    bool caps_indicator_disabled : 1;
     // Reserved bits for future use
-    uint16_t reserved : 10;
+    uint16_t reserved : 8;
   };
   uint16_t raw;
 } eeconfig_options_t;
@@ -67,8 +73,8 @@ _Static_assert(sizeof(eeconfig_options_t) == sizeof(uint16_t),
 
 #if defined(RGB_NUM_LEDS)
 // Lighting effects, ported from QMK RGB Matrix. The order follows the stock
-// MAD60 HE effect list (vendor number in brackets); never reorder, the number
-// is stored.
+// MAD60 HE effect list (vendor number in brackets), then the rest of QMK's
+// effects (v1.1); never reorder, the number is stored.
 typedef enum {
   RGB_EFFECT_OFF = 0,               // [0] Close
   RGB_EFFECT_CUSTOM,                // [1] Customization (per-key colours)
@@ -91,6 +97,38 @@ typedef enum {
   RGB_EFFECT_SOLID_REACTIVE_SIMPLE, // [31] Monochromatic Lighting Up
   RGB_EFFECT_SOLID_REACTIVE_MULTICROSS, // [36] Crucifix
   RGB_EFFECT_SPLASH,                // [39] Fingertip Rainbow
+  // Not in the stock list (QMK effect names)
+  RGB_EFFECT_BAND_PINWHEEL_VAL,
+  RGB_EFFECT_BAND_SPIRAL_VAL,
+  RGB_EFFECT_CYCLE_LEFT_RIGHT,
+  RGB_EFFECT_CYCLE_UP_DOWN,
+  RGB_EFFECT_RAINBOW_MOVING_CHEVRON,
+  RGB_EFFECT_CYCLE_OUT_IN,
+  RGB_EFFECT_CYCLE_OUT_IN_DUAL,
+  RGB_EFFECT_CYCLE_SPIRAL,
+  RGB_EFFECT_DUAL_BEACON,
+  RGB_EFFECT_RAINBOW_BEACON,
+  RGB_EFFECT_RAINDROPS,
+  RGB_EFFECT_HUE_PENDULUM,
+  RGB_EFFECT_PIXEL_FRACTAL,
+  RGB_EFFECT_PIXEL_FLOW,
+  RGB_EFFECT_PIXEL_RAIN,
+  RGB_EFFECT_TYPING_HEATMAP,
+  RGB_EFFECT_SOLID_REACTIVE,
+  RGB_EFFECT_SOLID_REACTIVE_WIDE,
+  RGB_EFFECT_SOLID_REACTIVE_MULTIWIDE,
+  RGB_EFFECT_SOLID_REACTIVE_CROSS,
+  RGB_EFFECT_SOLID_REACTIVE_NEXUS,
+  RGB_EFFECT_SOLID_REACTIVE_MULTINEXUS,
+  RGB_EFFECT_MULTISPLASH,
+  RGB_EFFECT_SOLID_SPLASH,
+  RGB_EFFECT_SOLID_MULTISPLASH,
+  RGB_EFFECT_STARLIGHT,
+  RGB_EFFECT_STARLIGHT_SMOOTH,
+  RGB_EFFECT_STARLIGHT_DUAL_HUE,
+  RGB_EFFECT_STARLIGHT_DUAL_SAT,
+  RGB_EFFECT_RIVERFLOW,
+  RGB_EFFECT_FLOWER_BLOOMING,
   RGB_EFFECT_COUNT,
 } rgb_effect_t;
 

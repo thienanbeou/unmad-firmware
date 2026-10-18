@@ -172,6 +172,15 @@ void matrix_scan(void) {
   }
 }
 
+#if defined(BOOTMAGIC_KEY)
+void matrix_bootmagic(void) {
+  if (key_matrix[BOOTMAGIC_KEY].adc_filtered >= BOOTMAGIC_MIN_ADC)
+    // Held while plugging in. Release it before the bootloader takes over;
+    // a replug starts the firmware again.
+    board_enter_bootloader();
+}
+#endif
+
 void matrix_disable_rapid_trigger(uint8_t key, bool disable) {
   bitmap_set(rapid_trigger_disabled, key, disable);
 }

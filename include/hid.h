@@ -47,6 +47,42 @@ void hid_keycode_add(uint8_t keycode);
 void hid_keycode_remove(uint8_t keycode);
 
 /**
+ * @brief Press Grave Escape: Escape, or Grave when Shift or GUI is held and
+ * Ctrl is not (Ctrl + Shift + Esc stays the Task Manager shortcut)
+ *
+ * @return None
+ */
+void hid_grave_escape_press(void);
+
+/**
+ * @brief Release what `hid_grave_escape_press` pressed
+ *
+ * @return None
+ */
+void hid_grave_escape_release(void);
+
+/**
+ * @brief Press Repeat Key: the last key again, with the modifiers held then
+ *
+ * @return None
+ */
+void hid_repeat_press(void);
+
+/**
+ * @brief Release what `hid_repeat_press` pressed
+ *
+ * @return None
+ */
+void hid_repeat_release(void);
+
+/**
+ * @brief Keyboard LED state from the host (bit 1 = Caps Lock)
+ *
+ * @return LED bits
+ */
+uint8_t hid_get_led_state(void);
+
+/**
  * @brief Send all HID reports
  *
  * This function will block until the device is ready to send the reports.
