@@ -151,8 +151,10 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   `src/rgb.c`: all of QMK's RGB Matrix effects, 52 from v1.1 (21 in v1.0,
   the stock list), a colour range for the rainbow effects, per-key colours),
   set at runtime with raw HID commands 0xE0-0xE3. From v1.1 the Caps Lock key
-  lights white while Caps Lock is on (option bit 7 turns it off). Defaults in `config.h`: Rainbow Pinwheels (the stock "Colorful
-  Swirls 2"), brightness 210 (the stock maximum; the ceiling is 255).
+  lights while Caps Lock is on, in its own colour and brightness (white 210 by
+  default, commands 0xE7 / 0xE8; option bit 7 turns it off). Defaults in
+  `config.h`: Rainbow Pinwheels (the stock "Colorful Swirls 2"), brightness
+  210 (the stock maximum; the ceiling is 255).
 - Stock switches: WASD swap, Win lock, 6KRO (option bits 3-5, keys
   `SP_WASD_SWAP`, `SP_GUI_LOCK`, `SP_NKRO_TOGGLE`), and from v1.1 Mac mode
   (Alt and Win swapped, bit 6, `SP_MAC_MODE`, the stock Win/Mac switch).

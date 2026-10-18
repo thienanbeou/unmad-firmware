@@ -69,6 +69,9 @@ typedef enum {
   // in: u32 LE length, u32 LE CRC-32 (zlib), "BOOT"; writes the staged image to
   // the bootloader sector (board_install_bootloader)
   COMMAND_INSTALL_BOOTLOADER,
+  // Lighting: the Caps Lock indicator colour (src/rgb.c)
+  COMMAND_GET_RGB_CAPS,
+  COMMAND_SET_RGB_CAPS,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;

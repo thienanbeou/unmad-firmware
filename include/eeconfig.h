@@ -147,6 +147,11 @@ typedef struct __attribute__((packed)) {
   // Colour range of the rainbow effects (added in v1.7): 255 sweeps the whole
   // colour wheel as in QMK, less keeps them in a band around the base hue
   uint8_t hue_range;
+  // Caps Lock indicator colour in QMK HSV (added in v1.8), drawn at
+  // `caps_val` whatever the effect's brightness
+  uint8_t caps_hue;
+  uint8_t caps_sat;
+  uint8_t caps_val;
 } eeconfig_rgb_t;
 #endif
 
@@ -164,7 +169,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0107
+#define EECONFIG_VERSION 0x0108
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -189,7 +194,8 @@ typedef struct __attribute__((packed)) {
   // Last non-default profile index, used for profile swapping
   uint8_t last_non_default_profile;
 #if defined(RGB_NUM_LEDS)
-  // Lighting configuration (added in v1.6 of this fork, hue_range in v1.7)
+  // Lighting configuration (added in v1.6 of this fork, hue_range in v1.7,
+  // the Caps Lock colour in v1.8)
   eeconfig_rgb_t rgb;
 #endif
   // End of global configurations
@@ -240,6 +246,9 @@ extern const eeconfig_t *eeconfig;
       .val = RGB_DEFAULT_VAL,                                                  \
       .speed = RGB_DEFAULT_SPEED,                                              \
       .hue_range = 255,                                                        \
+      .caps_hue = 0,                                                           \
+      .caps_sat = 0,                                                           \
+      .caps_val = RGB_DEFAULT_VAL,                                             \
   }
 #endif
 

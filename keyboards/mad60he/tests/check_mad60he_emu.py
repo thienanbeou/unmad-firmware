@@ -368,9 +368,11 @@ if "rgb_slots" in syms:
         summary.append(f"{name.lower()} {lit[-1]}")
     print(f"11 effects: all {NUM_EFFECTS} render and return; LEDs lit per effect: " + ", ".join(summary))
 
-    # 11b. Caps Lock indicator: the Caps key's LED white while the host's Caps
-    # Lock is on, over any effect (also Off), never below brightness 64; off
-    # with option bit 7; when it goes off the effect redraws that LED
+    # 11b. Caps Lock indicator: the Caps key's LED in its own colour (default
+    # white at the default brightness) while the host's Caps Lock is on, over
+    # any effect (also Off) and whatever the effect's brightness; colour set
+    # and read back with GET/SET_RGB_CAPS; off with option bit 7; when it goes
+    # off the effect redraws that LED
     if "led_state" in syms:
         OPTIONS = b.r32(syms["eeconfig"]) + 132
         caps = key_leds[int(cfg["RGB_CAPS_LOCK_KEY"])]
@@ -392,7 +394,22 @@ if "rgb_slots" in syms:
         ok, _ = command(0xE1, 0, 0, 0, 0, 128, 255)                 # brightness 0
         tick += 40
         frame(tick)
-        assert leds()[caps] == (64, 64, 64), "indicator below the minimum brightness"
+        assert leds()[caps] == (210, 210, 210), "indicator follows the effect's brightness"
+        # Own colour: red at 120, then back to the default
+        ok, out = command(0xE7)
+        assert ok and list(out[1:4]) == [0, 0, int(cfg["RGB_DEFAULT_VAL"])], f"GET_RGB_CAPS {list(out[1:4])}"
+        ok, _ = command(0xE8, 0, 255, 120)
+        assert ok, "SET_RGB_CAPS"
+        ok, out = command(0xE7)
+        assert list(out[1:4]) == [0, 255, 120], f"GET_RGB_CAPS after set {list(out[1:4])}"
+        tick += 40
+        frame(tick)
+        assert leds()[caps] == hsv(0, 255, 120), f"red indicator {leds()[caps]}"
+        ok, _ = command(0xE8, 170, 255, 255)
+        tick += 40
+        frame(tick)
+        assert leds()[caps] == hsv(170, 255, min(255, int(cfg["RGB_MAX_BRIGHTNESS"]))), "blue indicator"
+        ok, _ = command(0xE8, 0, 0, int(cfg["RGB_DEFAULT_VAL"]))
         # Raindrops repaints one LED at a time: the redraw on Caps off must
         # still clear the white
         ok, _ = command(0xE1, names.index("RAINDROPS"), 85, 255, 210, 0, 255)
@@ -403,8 +420,9 @@ if "rgb_slots" in syms:
         tick += 40
         frame(tick)
         assert leds()[caps] != (210, 210, 210), "white stayed after Caps Lock off"
-        print("11b Caps Lock indicator: white on the Caps key over any effect (min "
-              "brightness 64), off with option bit 7, cleared by a redraw when it goes off")
+        print("11b Caps Lock indicator: own colour on the Caps key over any effect "
+              "(default white 210, set / read back red and blue), off with option bit 7, "
+              "cleared by a redraw when it goes off")
     else:
         print("11b Caps Lock indicator: not in this build")
 else:

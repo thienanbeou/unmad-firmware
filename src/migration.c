@@ -95,6 +95,20 @@ static bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
   (MIGRATION_V1_5_GLOBAL_CONFIG_SIZE + MIGRATION_V1_7_RGB_CONFIG_SIZE)
 #define MIGRATION_V1_7_PROFILE_CONFIG_SIZE MIGRATION_V1_6_PROFILE_CONFIG_SIZE
 
+static bool v1_8_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_8_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+
+#if defined(RGB_NUM_LEDS)
+// `caps_hue`, `caps_sat`, `caps_val`
+#define MIGRATION_V1_8_RGB_CONFIG_SIZE (MIGRATION_V1_7_RGB_CONFIG_SIZE + 3)
+#else
+#define MIGRATION_V1_8_RGB_CONFIG_SIZE 0
+#endif
+#define MIGRATION_V1_8_GLOBAL_CONFIG_SIZE                                      \
+  (MIGRATION_V1_5_GLOBAL_CONFIG_SIZE + MIGRATION_V1_8_RGB_CONFIG_SIZE)
+#define MIGRATION_V1_8_PROFILE_CONFIG_SIZE MIGRATION_V1_7_PROFILE_CONFIG_SIZE
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -152,13 +166,20 @@ static const migration_t migrations[] = {
         .global_config_func = v1_7_global_config_func,
         .profile_config_func = v1_7_profile_config_func,
     },
+    {
+        .version = 0x0108,
+        .global_config_size = MIGRATION_V1_8_GLOBAL_CONFIG_SIZE,
+        .profile_config_size = MIGRATION_V1_8_PROFILE_CONFIG_SIZE,
+        .global_config_func = v1_8_global_config_func,
+        .profile_config_func = v1_8_profile_config_func,
+    },
 };
 
 // An assertion to remind us to bump the persistent configuration version, and
 // implement a migration function if there is a change to the configuration
 // type. Update the assertion when a new version is added.
-_Static_assert(MIGRATION_V1_7_GLOBAL_CONFIG_SIZE +
-                       NUM_PROFILES * MIGRATION_V1_7_PROFILE_CONFIG_SIZE ==
+_Static_assert(MIGRATION_V1_8_GLOBAL_CONFIG_SIZE +
+                       NUM_PROFILES * MIGRATION_V1_8_PROFILE_CONFIG_SIZE ==
                    offsetof(eeconfig_t, magic_end),
                "Invalid configuration size");
 
@@ -487,6 +508,37 @@ bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
 
   // Copy the entire profile
   migration_memcpy(&dst, &src, MIGRATION_V1_7_PROFILE_CONFIG_SIZE);
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.7 -> v1.8 Migration (this fork: Caps Lock indicator colour)
+//--------------------------------------------------------------------+
+
+bool v1_8_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0107)
+    // Expected version v1.7
+    return false;
+
+  // Copy the entire global configuration
+  migration_memcpy(&dst, &src, MIGRATION_V1_7_GLOBAL_CONFIG_SIZE);
+#if defined(RGB_NUM_LEDS)
+  // Caps Lock indicator: white at the default brightness
+  migration_assign_uint8_t(&dst, 0);
+  migration_assign_uint8_t(&dst, 0);
+  migration_assign_uint8_t(&dst, RGB_DEFAULT_VAL);
+#endif
+
+  return true;
+}
+
+bool v1_8_profile_config_func(uint8_t profile, uint8_t *dst,
+                              const uint8_t *src) {
+  (void)profile;
+
+  // Copy the entire profile
+  migration_memcpy(&dst, &src, MIGRATION_V1_8_PROFILE_CONFIG_SIZE);
 
   return true;
 }

@@ -1090,11 +1090,11 @@ void rgb_task(void) {
   rgb_render(init);
 #if defined(RGB_CAPS_LOCK_KEY)
   if (caps) {
-    // White at the set brightness, but always visible (also with the
-    // lighting off)
-    const uint8_t v =
-        M_MAX(M_MIN(eeconfig->rgb.val, RGB_MAX_BRIGHTNESS), 64);
-    rgb_driver_set(key_leds[RGB_CAPS_LOCK_KEY], v, v, v);
+    // Its own colour and brightness, also with the lighting off
+    const eeconfig_rgb_t *cfg = &eeconfig->rgb;
+    const rgb_t c = hsv_to_rgb((hsv_t){
+        cfg->caps_hue, cfg->caps_sat, M_MIN(cfg->caps_val, RGB_MAX_BRIGHTNESS)});
+    rgb_driver_set(key_leds[RGB_CAPS_LOCK_KEY], c.r, c.g, c.b);
   }
 #endif
 }
@@ -1152,6 +1152,17 @@ bool rgb_command(const uint8_t *in, uint8_t *out) {
         len > NUM_KEYS - offset)
       return false;
     return EECONFIG_WRITE_N(rgb.key_colors[offset], &in[3], len * 3u);
+  }
+  case COMMAND_GET_RGB_CAPS:
+    // Caps Lock indicator hue, sat, val
+    out[1] = eeconfig->rgb.caps_hue;
+    out[2] = eeconfig->rgb.caps_sat;
+    out[3] = eeconfig->rgb.caps_val;
+    return true;
+  case COMMAND_SET_RGB_CAPS: {
+    // hue, sat, val (capped at the maximum brightness)
+    const uint8_t caps[3] = {in[1], in[2], M_MIN(in[3], RGB_MAX_BRIGHTNESS)};
+    return EECONFIG_WRITE_N(rgb.caps_hue, caps, sizeof(caps));
   }
   default:
     return false;
