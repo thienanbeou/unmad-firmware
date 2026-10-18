@@ -1,11 +1,11 @@
-"""Replace the bootloader in sector 0 from our libhmk build (libhmk_mad60he_v17boot.bin).
+"""Replace the MAD60 HE bootloader (flash sector 0) from the running Unmad firmware (v1.0+).
 
 usage: hmk_bootloader.py verify FILE          read sector 0 and compare (read-only)
        hmk_bootloader.py install FILE --yes   write FILE to sector 0, then read it back
 
-FILE: a raw sector 0 image: mad60boot's raw.bin (the open bootloader), or the
-sector0-before-install-*.bin a previous install saved (to go back to the
-vendor bootloader). install saves the current sector 0 to the current folder
+FILE: a raw sector 0 image: unmad-bootloader-mad60he-v1.0.bin (the open
+bootloader), or the sector0-before-install-*.bin a previous install saved (to
+go back to the vendor bootloader). install saves the current sector 0 to the current folder
 first, stages the image in RAM (COMMAND_STAGE_BOOTLOADER 0xE5), has the firmware check
 CRC and vectors, erase and write the sector (COMMAND_INSTALL_BOOTLOADER 0xE6),
 then reads all 16 KB back over COMMAND_READ_MEMORY 0xE4.
