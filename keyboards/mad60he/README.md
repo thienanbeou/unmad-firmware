@@ -16,7 +16,7 @@ but going back to the stock firmware is one command (below).
 
 You need: the keyboard plugged in by USB, Python 3, and the
 [release files](https://github.com/thienanbeou/unmad-firmware/releases)
-`unmad-firmware-mad60he-v1.0.bin` and `fwtool.py` in one folder.
+`unmad-firmware-mad60he-v1.1.bin` and `fwtool.py` in one folder.
 
 1. Install the HID library once: `pip install hidapi`.
    Linux only: allow access without root, then replug:
@@ -28,7 +28,7 @@ You need: the keyboard plugged in by USB, Python 3, and the
 2. Close the vendor's web app or driver if it is open.
 3. Flash (about 10 seconds; keep the cable in):
 
-       python fwtool.py flash unmad-firmware-mad60he-v1.0.bin --yes --keep-settings
+       python fwtool.py flash unmad-firmware-mad60he-v1.1.bin --yes --keep-settings
 
    `--keep-settings` leaves your stock settings untouched in flash, so they
    are still there if you go back.
