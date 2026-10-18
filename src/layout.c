@@ -93,6 +93,47 @@ static uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key) {
   return CURRENT_PROFILE.keymap[default_layer][key];
 }
 
+/**
+ * @brief Swap W/A/S/D with the arrow keys when the stock WASD switch is on
+ *
+ * @param keycode Keycode
+ *
+ * @return Keycode to use
+ */
+static uint8_t layout_wasd_swap(uint8_t keycode) {
+  static const uint8_t pairs[][2] = {
+      {KC_W, KC_UP}, {KC_A, KC_LEFT}, {KC_S, KC_DOWN}, {KC_D, KC_RIGHT}};
+
+  if (!eeconfig->options.wasd_swap_enabled)
+    return keycode;
+  for (uint32_t i = 0; i < M_ARRAY_SIZE(pairs); i++) {
+    if (keycode == pairs[i][0])
+      return pairs[i][1];
+    if (keycode == pairs[i][1])
+      return pairs[i][0];
+  }
+  return keycode;
+}
+
+/**
+ * @brief Toggle one of the stock switches stored in the options
+ *
+ * @param keycode `SP_WASD_SWAP`, `SP_GUI_LOCK` or `SP_NKRO_TOGGLE`
+ *
+ * @return None
+ */
+static void layout_toggle_option(uint8_t keycode) {
+  eeconfig_options_t options = eeconfig->options;
+
+  if (keycode == SP_WASD_SWAP)
+    options.wasd_swap_enabled ^= 1;
+  else if (keycode == SP_GUI_LOCK)
+    options.gui_lock_enabled ^= 1;
+  else
+    options.nkro_disabled ^= 1;
+  EECONFIG_WRITE(options, &options);
+}
+
 // Only send reports if they changed
 static bool should_send_reports;
 // Whether the key is disabled by `SP_KEY_LOCK`
@@ -109,6 +150,10 @@ static uint8_t active_keycodes[NUM_KEYS];
 static uint8_t advanced_key_indices[NUM_LAYERS][NUM_KEYS];
 // Same as `active_keycodes` but for advanced keys
 static uint8_t active_advanced_keys[NUM_KEYS];
+// Key presses held back while a Tap Dance decides or sends its output, so that
+// they reach the host after it. Replayed once the Tap Dance is done.
+// ponytail: keys held back together replay in key index order, not press order
+static bitmap_t deferred_presses[] = MAKE_BITMAP(NUM_KEYS);
 
 void layout_init(void) { layout_load_advanced_keys(); }
 
@@ -136,10 +181,22 @@ void layout_task(void) {
 
   const uint8_t current_layer = layout_get_current_layer();
   bool has_non_tap_hold_press = false;
+  bool tap_dance_busy = advanced_key_tap_dance_busy();
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     const key_state_t *k = &key_matrix[i];
     const bool last_key_press = bitmap_get(key_press_states, i);
+    bool is_pressed = k->is_pressed;
+
+    if (bitmap_get(deferred_presses, i)) {
+      if (tap_dance_busy)
+        // Still waiting for the Tap Dance
+        continue;
+      bitmap_set(deferred_presses, i, false);
+      // Replay the press now. If the key is already up, its release follows
+      // in the next scan.
+      is_pressed = true;
+    }
 
     if ((current_layer == 0) & eeconfig->options.xinput_enabled) {
       // XInput key only applies to layer 0. We process it first since the
@@ -163,10 +220,22 @@ void layout_task(void) {
       // Only keys in layer 0 can be disabled.
       continue;
 
-    if (k->is_pressed & !last_key_press) {
+    if (is_pressed & !last_key_press) {
       // Key press event
-      const uint8_t keycode = layout_get_keycode(current_layer, i);
+      const uint8_t keycode =
+          layout_wasd_swap(layout_get_keycode(current_layer, i));
       const uint8_t ak_index = advanced_key_indices[current_layer][i];
+      const bool is_tap_dance =
+          ak_index && CURRENT_PROFILE.advanced_keys[ak_index - 1].type ==
+                          AK_TYPE_TAP_DANCE;
+
+      if (tap_dance_busy & !is_tap_dance) {
+        // Another key interrupts the Tap Dance, and waits for its output
+        advanced_key_tap_dance_interrupt();
+        bitmap_set(deferred_presses, i, true);
+        continue;
+      }
+      tap_dance_busy |= is_tap_dance;
 
       if (ak_index) {
         active_advanced_keys[i] = ak_index;
@@ -185,7 +254,7 @@ void layout_task(void) {
         layout_register(i, keycode);
         has_non_tap_hold_press |= (keycode != KC_NO);
       }
-    } else if (!k->is_pressed & last_key_press) {
+    } else if (!is_pressed & last_key_press) {
       // Key release event
       const uint8_t keycode = active_keycodes[i];
       const uint8_t ak_index = active_advanced_keys[i];
@@ -203,7 +272,7 @@ void layout_task(void) {
         active_keycodes[i] = KC_NO;
         layout_unregister(i, keycode);
       }
-    } else if (k->is_pressed) {
+    } else if (is_pressed) {
       // Key hold event
       const uint8_t keycode = active_keycodes[i];
       const uint8_t ak_index = active_advanced_keys[i];
@@ -220,7 +289,7 @@ void layout_task(void) {
     }
 
     // Finally, update the key state
-    bitmap_set(key_press_states, i, k->is_pressed);
+    bitmap_set(key_press_states, i, is_pressed);
   }
 
   if (has_non_tap_hold_press || timer_elapsed(last_ak_tick) > 0) {
@@ -300,6 +369,12 @@ void layout_register(uint8_t key, uint8_t keycode) {
 
   case SP_BOOT:
     board_enter_bootloader();
+    break;
+
+  case SP_WASD_SWAP:
+  case SP_GUI_LOCK:
+  case SP_NKRO_TOGGLE:
+    layout_toggle_option(keycode);
     break;
 
   default:

@@ -20,6 +20,7 @@
 #include "layout.h"
 #include "matrix.h"
 #include "metadata.h"
+#include "rgb.h"
 #include "tusb.h"
 
 // Helper macro to verify command parameters
@@ -469,6 +470,41 @@ static void command_process(void) {
                              &p->gamepad_options);
     break;
   }
+#if defined(RGB_NUM_LEDS)
+  case COMMAND_GET_RGB:
+  case COMMAND_SET_RGB:
+  case COMMAND_GET_RGB_KEY_COLORS:
+  case COMMAND_SET_RGB_KEY_COLORS: {
+    success = rgb_command(in_buf, out_buf);
+    break;
+  }
+#endif
+#if defined(BOARD_HAS_READ_MEMORY)
+  case COMMAND_READ_MEMORY: {
+    uint32_t addr;
+    memcpy(&addr, &in_buf[1], 4);
+    success = in_buf[5] <= RAW_HID_EP_SIZE - 1 &&
+              board_read_memory(addr, in_buf[5], &out_buf[1]);
+    break;
+  }
+#endif
+#if defined(BOARD_HAS_BOOTLOADER_INSTALL)
+  case COMMAND_STAGE_BOOTLOADER: {
+    uint16_t offset;
+    memcpy(&offset, &in_buf[1], 2);
+    success = in_buf[3] <= RAW_HID_EP_SIZE - 4 &&
+              board_stage_bootloader(offset, in_buf[3], &in_buf[4]);
+    break;
+  }
+  case COMMAND_INSTALL_BOOTLOADER: {
+    uint32_t len, crc;
+    memcpy(&len, &in_buf[1], 4);
+    memcpy(&crc, &in_buf[5], 4);
+    success = memcmp(&in_buf[9], "BOOT", 4) == 0 &&
+              board_install_bootloader(len, crc);
+    break;
+  }
+#endif
   default: {
     // Unknown command
     success = false;

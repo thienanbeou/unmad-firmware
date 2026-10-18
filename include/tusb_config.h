@@ -37,7 +37,9 @@
 // interface with multiple reports)
 #define CFG_TUD_HID_EP_BUFSIZE 64
 
-#if defined(BOARD_USB_FS)
+#if defined(BOARD_TUD_RHPORT)
+// Set by the driver's board_def.h, e.g. the OTG_HS core running at full speed
+#elif defined(BOARD_USB_FS)
 #define BOARD_TUD_RHPORT 0
 #elif defined(BOARD_USB_HS)
 #define BOARD_TUD_RHPORT 1

@@ -130,6 +130,7 @@ typedef enum {
   AK_TYPE_TAP_HOLD,
   AK_TYPE_TOGGLE,
   AK_TYPE_MACRO,
+  AK_TYPE_TAP_DANCE,
   AK_TYPE_COUNT,
 } ak_type_t;
 
@@ -227,6 +228,25 @@ typedef struct __attribute__((packed)) {
   macro_node_id_t head;
 } macro_t;
 
+// Tap Dance actions, chosen by the number of taps and whether the key is
+// still held when the tapping term ends
+typedef enum {
+  TD_ACTION_TAP = 0,
+  TD_ACTION_HOLD,
+  TD_ACTION_DOUBLE_TAP,
+  TD_ACTION_TAP_HOLD,
+  TD_ACTION_COUNT,
+} td_action_t;
+
+// Tap Dance configuration. Each action is the head of a macro in the profile's
+// macro nodes, or `MACRO_NODE_NONE` if unset. Keys the macro presses stay
+// pressed until the Tap Dance key is released.
+typedef struct __attribute__((packed)) {
+  macro_node_id_t actions[TD_ACTION_COUNT];
+  // Tapping term in milliseconds
+  uint16_t tapping_term;
+} tap_dance_t;
+
 // Advanced key configuration
 typedef struct __attribute__((packed)) {
   uint8_t layer;
@@ -238,8 +258,14 @@ typedef struct __attribute__((packed)) {
     tap_hold_t tap_hold;
     toggle_t toggle;
     macro_t macro;
+    tap_dance_t tap_dance;
   };
 } advanced_key_t;
+
+// Tap Dance must not grow advanced_key_t, or the stored configuration layout
+// (EECONFIG_VERSION) changes
+_Static_assert(sizeof(tap_dance_t) <= sizeof(dynamic_keystroke_t),
+               "tap_dance_t must fit in the existing advanced key union");
 
 // Gamepad buttons
 typedef enum {

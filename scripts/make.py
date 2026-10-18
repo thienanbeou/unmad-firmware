@@ -39,6 +39,14 @@ build_flags.include("include")
 build_flags.define("BOOTLOADER_ADDR", driver.metadata.bootloader.address)
 build_flags.define("BOOTLOADER_MAGIC", driver.metadata.bootloader.magic)
 
+# Firmware behind a vendor bootloader: relocate the vector table in SystemInit
+app_offset = driver.metadata.bootloader.app_offset
+build_flags.define("APP_OFFSET", app_offset)
+build_flags.linker_defsym("APP_OFFSET", app_offset)
+if app_offset:
+    build_flags.define("USER_VECT_TAB_ADDRESS")
+    build_flags.define("VECT_TAB_OFFSET", app_offset)
+
 # Flash Configuration
 flash_size = driver.metadata.flash.get_flash_size()
 flash_num_sectors = driver.metadata.flash.get_num_sectors()
@@ -109,6 +117,10 @@ if kb_json.analog.mux is not None:
     build_flags.define(
         "ADC_MUX_INPUT_MATRIX", utils.to_c_array(list(map(list, zip(*mux.matrix))))
     )
+    if mux.one_hot:
+        build_flags.define("ADC_MUX_ONE_HOT")
+        if mux.active_low:
+            build_flags.define("ADC_MUX_ACTIVE_LOW")
 
 # Calibration Configuration
 build_flags.define(
@@ -146,11 +158,71 @@ build_flags.define("NUM_MACRO_NODES", kb.num_macro_nodes)
 default_keymaps = utils.resolve_default_keymaps(kb_json)
 build_flags.define("DEFAULT_KEYMAPS", utils.to_c_array(default_keymaps))
 
+# Default macros and advanced keys
+if kb_json.advanced_keys:
+    macros = kb_json.macros or {}
+    nodes: list[str] = []
+    heads: dict[str, int] = {}
+
+    def macro_head(name: str | None) -> str:
+        # A macro name from `macros`, or a keycode that stays pressed while held
+        if name is None:
+            return "MACRO_NODE_NONE"
+        if name not in heads:
+            steps = macros.get(name) or [{"action": "press", "keycode": name, "delay": 0}]
+            steps = [s if isinstance(s, dict) else s.model_dump() for s in steps]
+            heads[name] = len(nodes)
+            for i, s in enumerate(steps):
+                nxt = len(nodes) + 1 if i + 1 < len(steps) else "MACRO_NODE_NONE"
+                nodes.append(
+                    f"{{.keycode = {s['keycode']}, .action = MACRO_ACTION_{s['action'].upper()}, "
+                    f".delay = {s['delay']}, .next = {nxt}}}"
+                )
+        return str(heads[name])
+
+    advanced_keys: list[str] = []
+    for ak in kb_json.advanced_keys:
+        assert ak.layer < kb.num_layers and ak.key < kb.num_keys, f"advanced key out of range: {ak}"
+        if ak.type == "tap_dance":
+            actions = ", ".join(macro_head(a) for a in (ak.tap, ak.hold, ak.double_tap, ak.tap_hold))
+            body = f".tap_dance = {{.actions = {{{actions}}}, .tapping_term = {ak.tapping_term}}}"
+            ak_type = "AK_TYPE_TAP_DANCE"
+        elif ak.type == "null_bind":
+            assert ak.secondary_key is not None and ak.secondary_key < kb.num_keys, f"bad secondary key: {ak}"
+            body = (
+                f".null_bind = {{.secondary_key = {ak.secondary_key}, "
+                f".behavior = NB_BEHAVIOR_{ak.behavior.upper()}, .bottom_out_point = {ak.bottom_out_point}}}"
+            )
+            ak_type = "AK_TYPE_NULL_BIND"
+        else:
+            assert ak.macro in macros, f"unknown macro {ak.macro!r}"
+            body = f".macro = {{.head = {macro_head(ak.macro)}}}"
+            ak_type = "AK_TYPE_MACRO"
+        advanced_keys.append(f"{{.layer = {ak.layer}, .key = {ak.key}, .type = {ak_type}, {body}}}")
+
+    assert len(nodes) <= kb.num_macro_nodes, f"{len(nodes)} macro nodes > num_macro_nodes"
+    assert len(advanced_keys) <= kb.num_advanced_keys, "too many advanced keys"
+    if nodes:
+        build_flags.define("DEFAULT_MACRO_NODES", "{" + ", ".join(nodes) + "}")
+    build_flags.define("DEFAULT_ADVANCED_KEYS", "{" + ", ".join(advanced_keys) + "}")
+
 # Actuation Configuration
 if kb_json.actuation is not None:
     actuation = kb_json.actuation
     if actuation.actuation_point is not None:
-        build_flags.define("ACTUATION_POINT", actuation.actuation_point)
+        # eeconfig.c reads DEFAULT_ACTUATION_POINT (upstream defined ACTUATION_POINT, which nothing reads)
+        build_flags.define("DEFAULT_ACTUATION_POINT", actuation.actuation_point)
+    if actuation.keys:
+        assert all(k.key < kb.num_keys for k in actuation.keys), "actuation key out of range"
+        build_flags.define(
+            "DEFAULT_KEY_ACTUATIONS",
+            "{"
+            + ", ".join(
+                f"{{{k.key}, {{{k.actuation_point}, {k.rt_down}, {k.rt_up}, {int(k.continuous)}}}}}"
+                for k in actuation.keys
+            )
+            + "}",
+        )
 
 # Add source build flags
 env.Append(BUILD_FLAGS=build_flags.get_flags())

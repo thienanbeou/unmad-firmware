@@ -12,6 +12,7 @@
 # this program. If not, see <https://www.gnu.org/licenses/>.
 
 from enum import Enum
+from typing import Literal
 from pydantic import BaseModel, Field, NonNegativeInt, PositiveFloat, PositiveInt
 
 
@@ -64,6 +65,11 @@ class KeyboardAnalogMux(BaseModel):
     input: list[NonNegativeInt | str]
     # Mapping from multiplexers to ADC input channels
     matrix: list[list[NonNegativeInt]]
+    # Drive the select lines one at a time (a column scan) instead of as a binary
+    # address. The matrix then has one row per select line instead of 2^n rows.
+    one_hot: bool = False
+    # Selected line is driven low and the others high. Only used with `one_hot`.
+    active_low: bool = False
 
 
 # Analog Configuration
@@ -113,12 +119,53 @@ class KeyboardLayout(BaseModel):
 
 
 # Actuation Configuration
+class KeyboardKeyActuation(BaseModel):
+    key: NonNegativeInt
+    actuation_point: int = Field(ge=0, le=255)
+    # Rapid Trigger press / release sensitivity (0 = off / same as rt_down)
+    rt_down: int = Field(ge=0, le=255, default=0)
+    rt_up: int = Field(ge=0, le=255, default=0)
+    continuous: bool = False
+
+
 class KeyboardActuation(BaseModel):
     # Default actuation point
     actuation_point: int = Field(ge=0, le=255)
+    # Keys that differ from the default
+    keys: list[KeyboardKeyActuation] = []
 
 
 # keyboard.json Schema
+# One step of a default macro
+class KeyboardMacroStep(BaseModel):
+    action: Literal["press", "release", "tap"]
+    # Keycode name, e.g. "KC_LSFT"
+    keycode: str
+    # Delay in milliseconds after this step
+    delay: int = Field(ge=0, le=8191, default=0)
+
+
+# Default advanced key. Only Tap Dance, Macro and Null Bind keys can be set here.
+class KeyboardAdvancedKey(BaseModel):
+    type: Literal["tap_dance", "macro", "null_bind"]
+    layer: NonNegativeInt
+    key: NonNegativeInt
+    # Tap Dance actions: a macro name from `macros`, or a keycode name that stays
+    # pressed while the key is held. Unset actions are left out.
+    tap: str | None = None
+    hold: str | None = None
+    double_tap: str | None = None
+    tap_hold: str | None = None
+    # Tap Dance tapping term in milliseconds
+    tapping_term: int = Field(ge=1, le=65535, default=200)
+    # Macro key: a macro name from `macros`
+    macro: str | None = None
+    # Null Bind: `key` is the primary key
+    secondary_key: NonNegativeInt | None = None
+    behavior: Literal["last", "primary", "secondary", "neutral", "distance"] = "last"
+    bottom_out_point: int = Field(ge=0, le=255, default=0)
+
+
 class Keyboard(BaseModel):
     name: str
     manufacturer: str
@@ -135,3 +182,7 @@ class Keyboard(BaseModel):
     # Default keymaps for each profile. If not specified, the default keymap will be used for all profiles.
     keymaps: list[list[list[str]]] | None = None
     actuation: KeyboardActuation | None = None
+    # Default macros by name, used by `advanced_keys`
+    macros: dict[str, list[KeyboardMacroStep]] | None = None
+    # Default advanced keys (same for every profile)
+    advanced_keys: list[KeyboardAdvancedKey] | None = None

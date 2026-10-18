@@ -40,6 +40,9 @@ class Bootloader:
     address: int
     # Magic value to enter bootloader on firmware startup
     magic: int
+    # Flash offset of the firmware when a vendor bootloader owns the start of
+    # flash. The vector table is relocated there.
+    app_offset: int = 0
 
 
 @dataclass
@@ -236,5 +239,33 @@ AT32F405XX = Driver(
                 [f"GPIO_PINS_{pin[1:]}" for pin in pins],
             ),
         ),
+    ),
+)
+
+# STM32F405 (1 MB) behind a vendor IAP bootloader, as on the Madlions MAD60 HE.
+# The bootloader lives in sector 0 and enters IAP mode when BOOTLOADER_MAGIC
+# is at the end of RAM across a reset, so the firmware starts at 0x08020000.
+# Sectors 1-3 hold the stock firmware's settings and are never written.
+STM32F405XX = Driver(
+    platformio=PlatformIO(
+        board="genericSTM32F405RG",
+        ldscript="stm32f405xg.ld",
+        framework="stm32cube",
+        platform="ststm32",
+    ),
+    tinyusb=TinyUSB(mcu="stm32f4"),
+    metadata=Metadata(
+        bootloader=Bootloader(
+            address=0x08000000,
+            magic=0x96969696,
+            app_offset=0x20000,
+        ),
+        flash=Flash(
+            sector_sizes=NonUniformSectors(
+                sizes=[16 * 1024] * 4 + [64 * 1024] + [128 * 1024] * 7
+            ),
+            empty_value=0xFFFFFFFF,
+        ),
+        adc=STM32F446XX.metadata.adc,
     ),
 )

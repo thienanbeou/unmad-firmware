@@ -51,14 +51,66 @@ typedef union __attribute__((packed)) {
     // Whether 8kHz polling rate is enabled. Only applicable if USB HS is
     // enabled. If disabled, the 1kHz polling rate is used instead.
     bool high_polling_rate_enabled : 1;
+    // Stock MAD60 HE switches (this fork): W/A/S/D and the arrow keys swapped,
+    // the GUI (Windows) keys blocked, and 6KRO only (no NKRO bitmap)
+    bool wasd_swap_enabled : 1;
+    bool gui_lock_enabled : 1;
+    bool nkro_disabled : 1;
     // Reserved bits for future use
-    uint16_t reserved : 13;
+    uint16_t reserved : 10;
   };
   uint16_t raw;
 } eeconfig_options_t;
 
 _Static_assert(sizeof(eeconfig_options_t) == sizeof(uint16_t),
                "Invalid eeconfig_options_t size");
+
+#if defined(RGB_NUM_LEDS)
+// Lighting effects, ported from QMK RGB Matrix. The order follows the stock
+// MAD60 HE effect list (vendor number in brackets); never reorder, the number
+// is stored.
+typedef enum {
+  RGB_EFFECT_OFF = 0,               // [0] Close
+  RGB_EFFECT_CUSTOM,                // [1] Customization (per-key colours)
+  RGB_EFFECT_SOLID_COLOR,           // [2] Monochromatic Constant Brightness
+  RGB_EFFECT_ALPHAS_MODS,           // [3] Focus
+  RGB_EFFECT_GRADIENT_UP_DOWN,      // [4] Rainbow static up and down
+  RGB_EFFECT_GRADIENT_LEFT_RIGHT,   // [5] Rainbow static left and right
+  RGB_EFFECT_BREATHING,             // [6] Monochromatic Breathing
+  RGB_EFFECT_BAND_SAT,              // [7] Ribbon fluttering 1
+  RGB_EFFECT_BAND_VAL,              // [8] Ribbon fluttering 2
+  RGB_EFFECT_BAND_PINWHEEL_SAT,     // [9] Rotating Belt 1
+  RGB_EFFECT_BAND_SPIRAL_SAT,       // [11] Rotating Belt 2
+  RGB_EFFECT_CYCLE_ALL,             // [13] Spectrum Cycle
+  RGB_EFFECT_CYCLE_PINWHEEL,        // [19] Colorful Swirls 1
+  RGB_EFFECT_RAINBOW_PINWHEELS,     // [23] Colorful Swirls 2
+  RGB_EFFECT_JELLYBEAN_RAINDROPS,   // [25] Christmas
+  RGB_EFFECT_HUE_BREATHING,         // [26] Spectrum Breathing
+  RGB_EFFECT_HUE_WAVE,              // [28] Spectrum Floating
+  RGB_EFFECT_DIGITAL_RAIN,          // [30] Digital Rain
+  RGB_EFFECT_SOLID_REACTIVE_SIMPLE, // [31] Monochromatic Lighting Up
+  RGB_EFFECT_SOLID_REACTIVE_MULTICROSS, // [36] Crucifix
+  RGB_EFFECT_SPLASH,                // [39] Fingertip Rainbow
+  RGB_EFFECT_COUNT,
+} rgb_effect_t;
+
+// Lighting configuration (this fork, see src/rgb.c)
+typedef struct __attribute__((packed)) {
+  // Effect (`rgb_effect_t`)
+  uint8_t effect;
+  // Base colour in QMK HSV (0-255 each); `val` is the brightness
+  uint8_t hue;
+  uint8_t sat;
+  uint8_t val;
+  // Animation speed (0-255)
+  uint8_t speed;
+  // Per-key colours (R, G, B) for the custom effect, by key index
+  uint8_t key_colors[NUM_KEYS][3];
+  // Colour range of the rainbow effects (added in v1.7): 255 sweeps the whole
+  // colour wheel as in QMK, less keeps them in a band around the base hue
+  uint8_t hue_range;
+} eeconfig_rgb_t;
+#endif
 
 // Keyboard profile configuration
 typedef struct __attribute__((packed)) {
@@ -74,7 +126,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0105
+#define EECONFIG_VERSION 0x0107
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -98,6 +150,10 @@ typedef struct __attribute__((packed)) {
   uint8_t current_profile;
   // Last non-default profile index, used for profile swapping
   uint8_t last_non_default_profile;
+#if defined(RGB_NUM_LEDS)
+  // Lighting configuration (added in v1.6 of this fork, hue_range in v1.7)
+  eeconfig_rgb_t rgb;
+#endif
   // End of global configurations
 
   // Profiles
@@ -134,6 +190,19 @@ extern const eeconfig_t *eeconfig;
 
 #if !defined(DEFAULT_KEYMAPS)
 #error "DEFAULT_KEYMAPS is not defined"
+#endif
+
+#if defined(RGB_NUM_LEDS) && !defined(DEFAULT_RGB)
+// Default lighting (board config.h sets the RGB_DEFAULT_* values)
+#define DEFAULT_RGB                                                            \
+  {                                                                            \
+      .effect = RGB_DEFAULT_EFFECT,                                            \
+      .hue = RGB_DEFAULT_HUE,                                                  \
+      .sat = RGB_DEFAULT_SAT,                                                  \
+      .val = RGB_DEFAULT_VAL,                                                  \
+      .speed = RGB_DEFAULT_SPEED,                                              \
+      .hue_range = 255,                                                        \
+  }
 #endif
 
 #if !defined(DEFAULT_ACTUATION_POINT)

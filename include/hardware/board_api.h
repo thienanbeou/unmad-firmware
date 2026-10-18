@@ -42,6 +42,15 @@ void board_init(void);
 void board_error_handler(void);
 
 /**
+ * @brief Board housekeeping, called once per main loop iteration
+ *
+ * For example a watchdog refresh, so that a stuck main loop resets the board.
+ *
+ * @return None
+ */
+void board_task(void);
+
+/**
  * @brief Reset the board
  *
  * This function should not return.
@@ -80,3 +89,18 @@ uint32_t board_serial(char *buf);
  * @return Current cycle count
  */
 uint32_t board_cycle_count(void);
+
+#if defined(BOARD_HAS_READ_MEMORY)
+// Copy `len` bytes at `addr` to `out`. Returns false (nothing read) unless the
+// whole range lies in one of the board's readable regions.
+bool board_read_memory(uint32_t addr, uint32_t len, uint8_t *out);
+#endif
+
+#if defined(BOARD_HAS_BOOTLOADER_INSTALL)
+// Copy `len` bytes to `offset` of the RAM buffer for a new bootloader image.
+bool board_stage_bootloader(uint32_t offset, uint32_t len, const uint8_t *data);
+// Erase the bootloader sector and write the first `len` staged bytes, if their
+// CRC-32 is `crc` and they start with a valid vector table. Returns true only
+// when the sector reads back as the image.
+bool board_install_bootloader(uint32_t len, uint32_t crc);
+#endif

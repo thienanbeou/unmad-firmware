@@ -23,6 +23,9 @@ const eeconfig_t *eeconfig;
 // Default configuration values
 static eeconfig_options_t default_options = DEFAULT_OPTIONS;
 static eeconfig_calibration_t default_calibration = DEFAULT_CALIBRATION;
+#if defined(RGB_NUM_LEDS)
+static const eeconfig_rgb_t default_rgb = DEFAULT_RGB;
+#endif
 static const uint8_t default_keymaps[NUM_PROFILES][NUM_LAYERS][NUM_KEYS] =
     DEFAULT_KEYMAPS;
 static const macro_node_t default_macro = {
@@ -36,6 +39,18 @@ static eeconfig_profile_t default_profile = {
     .tick_rate = DEFAULT_TICK_RATE,
 };
 
+// Optional default macros and advanced keys from keyboard.json (scripts/make.py)
+#if defined(DEFAULT_MACRO_NODES)
+static const macro_node_t default_macro_nodes[] = DEFAULT_MACRO_NODES;
+_Static_assert(M_ARRAY_SIZE(default_macro_nodes) <= NUM_MACRO_NODES,
+               "Too many default macro nodes");
+#endif
+#if defined(DEFAULT_ADVANCED_KEYS)
+static const advanced_key_t default_advanced_keys[] = DEFAULT_ADVANCED_KEYS;
+_Static_assert(M_ARRAY_SIZE(default_advanced_keys) <= NUM_ADVANCED_KEYS,
+               "Too many default advanced keys");
+#endif
+
 static bool eeconfig_write_default_profile(uint8_t profile) {
   if (profile >= NUM_PROFILES)
     return false;
@@ -44,6 +59,14 @@ static bool eeconfig_write_default_profile(uint8_t profile) {
          sizeof(default_profile.keymap));
   for (uint32_t i = 0; i < NUM_MACRO_NODES; i++)
     default_profile.macros[i] = default_macro;
+#if defined(DEFAULT_MACRO_NODES)
+  memcpy(default_profile.macros, default_macro_nodes,
+         sizeof(default_macro_nodes));
+#endif
+#if defined(DEFAULT_ADVANCED_KEYS)
+  memcpy(default_profile.advanced_keys, default_advanced_keys,
+         sizeof(default_advanced_keys));
+#endif
   return EECONFIG_WRITE(profiles[profile], &default_profile);
 }
 
@@ -57,6 +80,16 @@ void eeconfig_init(void) {
   // Update default profile with its default values
   for (uint32_t i = 0; i < NUM_KEYS; i++)
     default_profile.actuation_map[i].actuation_point = DEFAULT_ACTUATION_POINT;
+#if defined(DEFAULT_KEY_ACTUATIONS)
+  // Per-key actuation and Rapid Trigger from keyboard.json (scripts/make.py)
+  static const struct {
+    uint8_t key;
+    actuation_t actuation;
+  } key_actuations[] = DEFAULT_KEY_ACTUATIONS;
+  for (uint32_t i = 0; i < M_ARRAY_SIZE(key_actuations); i++)
+    default_profile.actuation_map[key_actuations[i].key] =
+        key_actuations[i].actuation;
+#endif
 
   eeconfig = (const eeconfig_t *)wl_cache;
   if (!eeconfig_is_latest_version() && !migration_try_migrate())
@@ -83,6 +116,9 @@ bool eeconfig_reset(void) {
   status &= EECONFIG_WRITE(options, &default_options);
   EECONFIG_WRITE_LOCAL(current_profile, 0);
   EECONFIG_WRITE_LOCAL(last_non_default_profile, M_MIN(1, NUM_PROFILES - 1));
+#if defined(RGB_NUM_LEDS)
+  status &= EECONFIG_WRITE(rgb, &default_rgb);
+#endif
   for (uint32_t i = 0; i < NUM_PROFILES; i++)
     status &= eeconfig_write_default_profile(i);
   EECONFIG_WRITE_LOCAL(magic_end, EECONFIG_MAGIC_END);

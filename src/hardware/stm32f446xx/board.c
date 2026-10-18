@@ -168,6 +168,8 @@ void board_error_handler(void) {
     ;
 }
 
+void board_task(void) {}
+
 void board_reset(void) { NVIC_SystemReset(); }
 
 void board_enter_bootloader(void) {

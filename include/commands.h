@@ -56,6 +56,20 @@ typedef enum {
   COMMAND_GET_MACROS,
   COMMAND_SET_MACROS,
 
+  // This fork (MAD60 HE): lighting, see src/rgb.c for the payloads
+  COMMAND_GET_RGB = 0xE0,
+  COMMAND_SET_RGB,
+  COMMAND_GET_RGB_KEY_COLORS,
+  COMMAND_SET_RGB_KEY_COLORS,
+  // in: u32 LE address, u8 length (<= 63); out: the bytes (board_read_memory)
+  COMMAND_READ_MEMORY,
+  // in: u16 LE offset, u8 length (<= 60), the bytes; copies part of a new
+  // bootloader image into RAM (board_stage_bootloader)
+  COMMAND_STAGE_BOOTLOADER,
+  // in: u32 LE length, u32 LE CRC-32 (zlib), "BOOT"; writes the staged image to
+  // the bootloader sector (board_install_bootloader)
+  COMMAND_INSTALL_BOOTLOADER,
+
   COMMAND_UNKNOWN = 255,
 } command_id_t;
 

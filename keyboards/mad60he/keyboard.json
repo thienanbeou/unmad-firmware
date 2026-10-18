@@ -1,0 +1,608 @@
+{
+  "name": "MAD60 HE",
+  "manufacturer": "Unmad",
+  "maintainer": "thienanbeou",
+  "usb": {
+    "vid": "0x1209",
+    "pid": "0x0001",
+    "port": "fs"
+  },
+  "keyboard": {
+    "num_profiles": 4,
+    "num_layers": 4,
+    "num_keys": 61,
+    "num_advanced_keys": 32
+  },
+  "hardware": {
+    "hse_value": 16000000,
+    "driver": "stm32f405xx"
+  },
+  "analog": {
+    "mux": {
+      "select": [
+        "A8",
+        "A9",
+        "A10",
+        "A11",
+        "A12",
+        "A15",
+        "C10",
+        "C11",
+        "C12",
+        "D2",
+        "B3",
+        "B4",
+        "B5",
+        "B6"
+      ],
+      "input": [
+        "A3",
+        "A2",
+        "A0",
+        "A1",
+        "A7"
+      ],
+      "matrix": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14
+        ],
+        [
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28
+        ],
+        [
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          0,
+          41
+        ],
+        [
+          42,
+          0,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          0,
+          53
+        ],
+        [
+          54,
+          55,
+          56,
+          0,
+          0,
+          0,
+          57,
+          0,
+          0,
+          0,
+          58,
+          59,
+          60,
+          61
+        ]
+      ],
+      "one_hot": true,
+      "active_low": true
+    },
+    "invert_adc": true
+  },
+  "calibration": {
+    "initial_rest_value": 2300,
+    "initial_bottom_out_threshold": 650
+  },
+  "layout": {
+    "keymap": [
+      [
+        {
+          "key": 0
+        },
+        {
+          "key": 1
+        },
+        {
+          "key": 2
+        },
+        {
+          "key": 3
+        },
+        {
+          "key": 4
+        },
+        {
+          "key": 5
+        },
+        {
+          "key": 6
+        },
+        {
+          "key": 7
+        },
+        {
+          "key": 8
+        },
+        {
+          "key": 9
+        },
+        {
+          "key": 10
+        },
+        {
+          "key": 11
+        },
+        {
+          "key": 12
+        },
+        {
+          "key": 13,
+          "w": 2
+        }
+      ],
+      [
+        {
+          "key": 14,
+          "w": 1.5
+        },
+        {
+          "key": 15
+        },
+        {
+          "key": 16
+        },
+        {
+          "key": 17
+        },
+        {
+          "key": 18
+        },
+        {
+          "key": 19
+        },
+        {
+          "key": 20
+        },
+        {
+          "key": 21
+        },
+        {
+          "key": 22
+        },
+        {
+          "key": 23
+        },
+        {
+          "key": 24
+        },
+        {
+          "key": 25
+        },
+        {
+          "key": 26
+        },
+        {
+          "key": 27,
+          "w": 1.5
+        }
+      ],
+      [
+        {
+          "key": 28,
+          "w": 1.75
+        },
+        {
+          "key": 29
+        },
+        {
+          "key": 30
+        },
+        {
+          "key": 31
+        },
+        {
+          "key": 32
+        },
+        {
+          "key": 33
+        },
+        {
+          "key": 34
+        },
+        {
+          "key": 35
+        },
+        {
+          "key": 36
+        },
+        {
+          "key": 37
+        },
+        {
+          "key": 38
+        },
+        {
+          "key": 39
+        },
+        {
+          "key": 40,
+          "w": 2.25
+        }
+      ],
+      [
+        {
+          "key": 41,
+          "w": 2.25
+        },
+        {
+          "key": 42
+        },
+        {
+          "key": 43
+        },
+        {
+          "key": 44
+        },
+        {
+          "key": 45
+        },
+        {
+          "key": 46
+        },
+        {
+          "key": 47
+        },
+        {
+          "key": 48
+        },
+        {
+          "key": 49
+        },
+        {
+          "key": 50
+        },
+        {
+          "key": 51
+        },
+        {
+          "key": 52,
+          "w": 2.75
+        }
+      ],
+      [
+        {
+          "key": 53,
+          "w": 1.25
+        },
+        {
+          "key": 54,
+          "w": 1.25
+        },
+        {
+          "key": 55,
+          "w": 1.25
+        },
+        {
+          "key": 56,
+          "w": 6.25
+        },
+        {
+          "key": 57,
+          "w": 1.25
+        },
+        {
+          "key": 58,
+          "w": 1.25
+        },
+        {
+          "key": 59,
+          "w": 1.25
+        },
+        {
+          "key": 60,
+          "w": 1.25
+        }
+      ]
+    ]
+  },
+  "keymap": [
+    [
+      "KC_ESCAPE",
+      "KC_1",
+      "KC_2",
+      "KC_3",
+      "KC_4",
+      "KC_5",
+      "KC_6",
+      "KC_7",
+      "KC_8",
+      "KC_9",
+      "KC_0",
+      "KC_MINUS",
+      "KC_EQUAL",
+      "KC_BACKSPACE",
+      "KC_TAB",
+      "KC_Q",
+      "KC_W",
+      "KC_E",
+      "KC_R",
+      "KC_T",
+      "KC_Y",
+      "KC_U",
+      "KC_I",
+      "KC_O",
+      "KC_P",
+      "KC_LEFT_BRACKET",
+      "KC_RIGHT_BRACKET",
+      "KC_BACKSLASH",
+      "KC_CAPS_LOCK",
+      "KC_A",
+      "KC_S",
+      "KC_D",
+      "KC_F",
+      "KC_G",
+      "KC_H",
+      "KC_J",
+      "KC_K",
+      "KC_L",
+      "KC_SEMICOLON",
+      "KC_QUOTE",
+      "KC_ENTER",
+      "KC_LEFT_SHIFT",
+      "KC_Z",
+      "KC_X",
+      "KC_C",
+      "KC_V",
+      "KC_B",
+      "KC_N",
+      "KC_M",
+      "KC_COMMA",
+      "KC_DOT",
+      "KC_SLASH",
+      "KC_RIGHT_SHIFT",
+      "KC_LEFT_CTRL",
+      "KC_LEFT_GUI",
+      "KC_LEFT_ALT",
+      "KC_SPACE",
+      "KC_RIGHT_ALT",
+      "KC_APPLICATION",
+      "KC_RIGHT_CTRL",
+      "MO(1)"
+    ],
+    [
+      "KC_GRAVE",
+      "KC_F1",
+      "KC_F2",
+      "KC_F3",
+      "KC_F4",
+      "KC_F5",
+      "KC_F6",
+      "KC_F7",
+      "KC_F8",
+      "KC_F9",
+      "KC_F10",
+      "KC_F11",
+      "KC_F12",
+      "KC_TRNS",
+      "KC_NO",
+      "KC_NO",
+      "KC_NO",
+      "KC_NO",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "SP_WASD_SWAP",
+      "KC_TRNS",
+      "KC_NO",
+      "KC_NO",
+      "KC_NO",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "SP_NKRO_TOGGLE",
+      "KC_NO",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_UP",
+      "KC_TRNS",
+      "KC_TRNS",
+      "SP_GUI_LOCK",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_LEFT",
+      "KC_DOWN",
+      "KC_RIGHT",
+      "KC_TRNS"
+    ],
+    [
+      "KC_ESCAPE",
+      "KC_1",
+      "KC_2",
+      "KC_3",
+      "KC_4",
+      "KC_5",
+      "KC_6",
+      "KC_7",
+      "KC_8",
+      "KC_9",
+      "KC_0",
+      "KC_MINUS",
+      "KC_EQUAL",
+      "KC_BACKSPACE",
+      "KC_TAB",
+      "KC_Q",
+      "KC_W",
+      "KC_E",
+      "KC_R",
+      "KC_T",
+      "KC_Y",
+      "KC_U",
+      "KC_I",
+      "KC_O",
+      "KC_P",
+      "KC_LEFT_BRACKET",
+      "KC_RIGHT_BRACKET",
+      "KC_BACKSLASH",
+      "KC_CAPS_LOCK",
+      "KC_A",
+      "KC_S",
+      "KC_D",
+      "KC_F",
+      "KC_G",
+      "KC_H",
+      "KC_J",
+      "KC_K",
+      "KC_L",
+      "KC_SEMICOLON",
+      "KC_QUOTE",
+      "KC_ENTER",
+      "KC_LEFT_SHIFT",
+      "KC_Z",
+      "KC_X",
+      "KC_C",
+      "KC_V",
+      "KC_B",
+      "KC_N",
+      "KC_M",
+      "KC_COMMA",
+      "KC_DOT",
+      "KC_SLASH",
+      "KC_RIGHT_SHIFT",
+      "KC_LEFT_CTRL",
+      "KC_LEFT_ALT",
+      "KC_LEFT_GUI",
+      "KC_SPACE",
+      "KC_RIGHT_GUI",
+      "KC_RIGHT_ALT",
+      "KC_RIGHT_CTRL",
+      "MO(3)"
+    ],
+    [
+      "KC_GRAVE",
+      "KC_F1",
+      "KC_F2",
+      "KC_F3",
+      "KC_F4",
+      "KC_F5",
+      "KC_F6",
+      "KC_F7",
+      "KC_F8",
+      "KC_F9",
+      "KC_F10",
+      "KC_F11",
+      "KC_F12",
+      "KC_TRNS",
+      "KC_NO",
+      "KC_NO",
+      "KC_NO",
+      "KC_NO",
+      "KC_LAUNCHPAD",
+      "KC_BRIGHTNESS_UP",
+      "KC_BRIGHTNESS_DOWN",
+      "KC_MEDIA_PREV_TRACK",
+      "KC_MEDIA_PLAY_PAUSE",
+      "KC_MEDIA_NEXT_TRACK",
+      "KC_AUDIO_MUTE",
+      "KC_AUDIO_VOL_UP",
+      "KC_AUDIO_VOL_DOWN",
+      "SP_WASD_SWAP",
+      "KC_TRNS",
+      "KC_NO",
+      "KC_NO",
+      "KC_NO",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "SP_NKRO_TOGGLE",
+      "KC_NO",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_UP",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_LEFT",
+      "KC_DOWN",
+      "KC_RIGHT",
+      "KC_TRNS"
+    ]
+  ],
+  "macros": {},
+  "advanced_keys": [],
+  "actuation": {
+    "actuation_point": 116,
+    "keys": []
+  }
+}

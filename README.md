@@ -1,5 +1,10 @@
 # libhmk
 
+> **Project Unmad fork.** This fork adds open firmware for the Madlions MAD60
+> HE (unofficial). Start at [keyboards/mad60he](keyboards/mad60he/README.md)
+> for the quick start, release files and the other two Unmad repos. Upstream:
+> [peppapighs/libhmk](https://github.com/peppapighs/libhmk).
+
 This repository contains libraries for building a Hall-effect keyboard firmware.
 
 ## Table of Contents

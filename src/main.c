@@ -50,6 +50,7 @@ int main(void) {
   tud_init(BOARD_TUD_RHPORT);
 
   while (1) {
+    board_task();
     tud_task();
 
     command_task();

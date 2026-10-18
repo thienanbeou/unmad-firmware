@@ -16,6 +16,7 @@
 #include "hid.h"
 
 #include "commands.h"
+#include "eeconfig.h"
 #include "keycodes.h"
 #include "matrix.h"
 #include "tusb.h"
@@ -119,6 +120,9 @@ void hid_keycode_add(uint8_t keycode) {
 
     if (!found) {
       if (num_6kro_keys == 6) {
+        if (eeconfig->options.nkro_disabled)
+          // 6KRO mode: a 7th key is ignored, like on a 6KRO keyboard
+          break;
         // If the 6KRO report is full, remove the oldest key
         for (uint32_t i = 0; i < 5; i++)
           kb_report.keycodes[i] = kb_report.keycodes[i + 1];
@@ -126,10 +130,17 @@ void hid_keycode_add(uint8_t keycode) {
       }
       kb_report.keycodes[num_6kro_keys++] = hid_code;
     }
+    // The host reads only the bitmap (the descriptor declares the 6-key list
+    // as padding; it is for the BIOS boot protocol), so in 6KRO mode the
+    // bitmap holds just the keys that made it into the 6-key list
     kb_report.bitmap[hid_code / 8] |= 1 << (hid_code & 7);
     break;
 
   case MODIFIER_KEYCODE_RANGE:
+    if (eeconfig->options.gui_lock_enabled &
+        ((keycode == KC_LEFT_GUI) | (keycode == KC_RIGHT_GUI)))
+      // Win lock
+      break;
     kb_report.modifiers |= hid_code;
     break;
 
@@ -164,6 +175,8 @@ void hid_keycode_remove(uint8_t keycode) {
         memmove(kb_report.keycodes + i, kb_report.keycodes + i + 1,
                 sizeof(uint8_t) * (num_6kro_keys - i - 1));
         num_6kro_keys--;
+        // Clear the freed slot, or the BIOS (boot protocol) sees a stale key
+        kb_report.keycodes[num_6kro_keys] = 0;
         break;
       }
     }

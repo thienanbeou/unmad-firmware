@@ -322,6 +322,50 @@ static void advanced_key_macro_run_step(ak_state_macro_t *state, uint8_t key,
   }
 }
 
+/**
+ * @brief Advance a running macro by one tick
+ *
+ * @param state Macro state
+ * @param key Key the macro keycodes are registered on
+ *
+ * @return None
+ */
+static void advanced_key_macro_advance(ak_state_macro_t *state, uint8_t key) {
+  if (state->current_node == MACRO_NODE_NONE ||
+      state->current_node >= NUM_MACRO_NODES)
+    return;
+
+  const macro_node_t *current_node = &CURRENT_PROFILE.macros[state->current_node];
+
+  bool delay_elapsed = timer_elapsed(state->since) >= current_node->delay;
+  switch (current_node->action) {
+  case MACRO_ACTION_TAP:
+    // Run the next macro step in a different matrix scan than the one that
+    // unregistered the key in the case of consecutive taps of the same keycode.
+    if (state->deferred_tap_ticks > 0) {
+      state->deferred_tap_ticks--;
+      if (state->deferred_tap_ticks == 0) {
+        layout_unregister(key, current_node->keycode);
+        advanced_key_macro_remove_active_keycode(state, current_node->keycode);
+      }
+    } else if (state->deferred_tap_ticks == 0 && delay_elapsed) {
+      // Unlike other actions, we wait for both the delay and the deferred tap
+      // ticks to elapse before running the next step.
+      advanced_key_macro_run_step(state, key, current_node->next);
+    }
+    break;
+
+  case MACRO_ACTION_PRESS:
+  case MACRO_ACTION_RELEASE:
+    if (delay_elapsed)
+      advanced_key_macro_run_step(state, key, current_node->next);
+    break;
+
+  default:
+    break;
+  }
+}
+
 static void advanced_key_macro(const advanced_key_event_t *event) {
   const macro_t *macro = &CURRENT_PROFILE.advanced_keys[event->ak_index].macro;
   ak_state_macro_t *state = &ak_states[event->ak_index].macro;
@@ -338,6 +382,244 @@ static void advanced_key_macro(const advanced_key_event_t *event) {
 
   default:
     break;
+  }
+}
+
+static void advanced_key_tap_dance_reset_state(ak_state_tap_dance_t *state) {
+  advanced_key_macro_reset_state(&state->macro);
+  state->since = state->restart_since = 0;
+  state->stage = TAP_DANCE_STAGE_NONE;
+  state->count = 0;
+  state->is_pressed = state->restart = state->restart_pressed = false;
+  state->first = state->last = MACRO_NODE_NONE;
+  state->first_left = 0;
+  state->on_last = false;
+  state->release_ticks = 0;
+}
+
+/**
+ * @brief Finish a Tap Dance run, or start the dance pressed meanwhile
+ *
+ * @param state Tap Dance state
+ *
+ * @return None
+ */
+static void advanced_key_tap_dance_done(ak_state_tap_dance_t *state) {
+  const bool restart = state->restart;
+  const uint32_t since = state->restart_since;
+  const bool is_pressed = state->restart_pressed;
+
+  advanced_key_tap_dance_reset_state(state);
+  if (restart) {
+    state->stage = TAP_DANCE_STAGE_PENDING;
+    state->count = 1;
+    state->since = since;
+    state->is_pressed = is_pressed;
+  }
+}
+
+/**
+ * @brief Start the next queued action of a Tap Dance, or finish it
+ *
+ * @param key Key index of the Tap Dance
+ * @param state Tap Dance state
+ *
+ * @return None
+ */
+static void advanced_key_tap_dance_next(uint8_t key,
+                                        ak_state_tap_dance_t *state) {
+  if (state->first_left > 0) {
+    state->first_left--;
+    advanced_key_macro_run_step(&state->macro, key, state->first);
+  } else if (!state->on_last && state->last != MACRO_NODE_NONE) {
+    state->on_last = true;
+    advanced_key_macro_run_step(&state->macro, key, state->last);
+  } else
+    advanced_key_tap_dance_done(state);
+}
+
+/**
+ * @brief Decide what a Tap Dance does and start doing it
+ *
+ * Same decisions as Vial's tap dance (`vial_tap_dance_finished`), which is what
+ * the stock MAD60 HE firmware runs:
+ * - 1 tap: released or interrupted -> tap; held -> hold, else tap
+ * - 2 taps: interrupted -> tap twice (the second held); released -> double tap,
+ *   else tap twice; held -> tap-hold, else tap then hold (or the one that is set)
+ * - 3 or more taps: tap that many times
+ *
+ * @param ak Advanced key configuration
+ * @param state Tap Dance state
+ * @param interrupted Whether another key was pressed during the dance
+ *
+ * @return None
+ */
+static void advanced_key_tap_dance_finish(const advanced_key_t *ak,
+                                          ak_state_tap_dance_t *state,
+                                          bool interrupted) {
+  const macro_node_id_t *actions = ak->tap_dance.actions;
+  const macro_node_id_t tap = actions[TD_ACTION_TAP];
+  const macro_node_id_t hold = actions[TD_ACTION_HOLD];
+  const macro_node_id_t double_tap = actions[TD_ACTION_DOUBLE_TAP];
+  const macro_node_id_t tap_hold = actions[TD_ACTION_TAP_HOLD];
+
+  state->first = state->last = MACRO_NODE_NONE;
+  state->first_left = 0;
+
+  if (state->count == 1) {
+    if (interrupted || !state->is_pressed || hold == MACRO_NODE_NONE)
+      state->last = tap;
+    else
+      state->last = hold;
+  } else if (state->count == 2) {
+    if (interrupted) {
+      state->first = state->last = tap;
+      state->first_left = 1;
+    } else if (!state->is_pressed) {
+      if (double_tap != MACRO_NODE_NONE)
+        state->last = double_tap;
+      else {
+        state->first = state->last = tap;
+        state->first_left = 1;
+      }
+    } else if (tap_hold != MACRO_NODE_NONE)
+      state->last = tap_hold;
+    else if (tap == MACRO_NODE_NONE)
+      state->last = hold;
+    else {
+      state->first = tap;
+      state->first_left = 1;
+      state->last = hold != MACRO_NODE_NONE ? hold : tap;
+    }
+  } else {
+    state->first = tap;
+    state->first_left = state->count;
+  }
+
+  state->stage = TAP_DANCE_STAGE_RUNNING;
+  state->on_last = false;
+  state->release_ticks = 0;
+  advanced_key_tap_dance_next(ak->key, state);
+}
+
+static void advanced_key_tap_dance(const advanced_key_event_t *event) {
+  ak_state_tap_dance_t *state = &ak_states[event->ak_index].tap_dance;
+
+  switch (event->type) {
+  case AK_EVENT_TYPE_PRESS:
+    // Pressing a Tap Dance key interrupts every other undecided dance
+    for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+      if (i != event->ak_index &&
+          CURRENT_PROFILE.advanced_keys[i].type == AK_TYPE_TAP_DANCE &&
+          ak_states[i].tap_dance.stage == TAP_DANCE_STAGE_PENDING)
+        advanced_key_tap_dance_finish(&CURRENT_PROFILE.advanced_keys[i],
+                                      &ak_states[i].tap_dance, true);
+    }
+
+    switch (state->stage) {
+    case TAP_DANCE_STAGE_NONE:
+      state->stage = TAP_DANCE_STAGE_PENDING;
+      state->count = 1;
+      state->since = timer_read();
+      state->is_pressed = true;
+      break;
+
+    case TAP_DANCE_STAGE_PENDING:
+      if (state->count < UINT8_MAX)
+        state->count++;
+      state->since = timer_read();
+      state->is_pressed = true;
+      break;
+
+    default:
+      // The previous dance is still sending its action; start a new one after
+      state->restart = true;
+      state->restart_since = timer_read();
+      state->restart_pressed = true;
+      break;
+    }
+    break;
+
+  case AK_EVENT_TYPE_RELEASE:
+    if (state->restart) {
+      state->restart_pressed = false;
+    } else if (state->stage == TAP_DANCE_STAGE_HELD) {
+      advanced_key_macro_stop(&state->macro, event->key);
+      advanced_key_tap_dance_done(state);
+    } else
+      // A running action releases its keys when it finishes
+      state->is_pressed = false;
+    break;
+
+  default:
+    break;
+  }
+}
+
+/**
+ * @brief Advance a Tap Dance by one tick
+ *
+ * @param ak Advanced key configuration
+ * @param state Tap Dance state
+ *
+ * @return None
+ */
+static void advanced_key_tap_dance_tick(const advanced_key_t *ak,
+                                        ak_state_tap_dance_t *state) {
+  switch (state->stage) {
+  case TAP_DANCE_STAGE_PENDING:
+    if (timer_elapsed(state->since) >= ak->tap_dance.tapping_term)
+      advanced_key_tap_dance_finish(ak, state, false);
+    break;
+
+  case TAP_DANCE_STAGE_RUNNING:
+    if (state->release_ticks > 0) {
+      // Keep the keys of a finished run pressed for a while so that the host
+      // sees them, then release them. The next run starts on the next tick, so
+      // a repeated key is never released and pressed in the same report.
+      if (--state->release_ticks == 0)
+        advanced_key_macro_stop(&state->macro, ak->key);
+      break;
+    }
+
+    advanced_key_macro_advance(&state->macro, ak->key);
+    if (state->macro.current_node != MACRO_NODE_NONE)
+      // The current run is still going
+      break;
+
+    if (state->on_last && state->is_pressed) {
+      // The last action keeps its keys pressed until the key is released
+      state->stage = TAP_DANCE_STAGE_HELD;
+      break;
+    }
+    if (state->macro.num_active_keycodes > 0) {
+      state->release_ticks = M_MAX(CURRENT_PROFILE.tick_rate, 1);
+      break;
+    }
+    advanced_key_tap_dance_next(ak->key, state);
+    break;
+
+  default:
+    break;
+  }
+}
+
+bool advanced_key_tap_dance_busy(void) {
+  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    if (CURRENT_PROFILE.advanced_keys[i].type == AK_TYPE_TAP_DANCE &&
+        (ak_states[i].tap_dance.stage == TAP_DANCE_STAGE_PENDING ||
+         ak_states[i].tap_dance.stage == TAP_DANCE_STAGE_RUNNING))
+      return true;
+  }
+  return false;
+}
+
+void advanced_key_tap_dance_interrupt(void) {
+  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    if (CURRENT_PROFILE.advanced_keys[i].type == AK_TYPE_TAP_DANCE &&
+        ak_states[i].tap_dance.stage == TAP_DANCE_STAGE_PENDING)
+      advanced_key_tap_dance_finish(&CURRENT_PROFILE.advanced_keys[i],
+                                    &ak_states[i].tap_dance, true);
   }
 }
 
@@ -367,6 +649,10 @@ static void advanced_key_reset_states(void) {
       advanced_key_macro_reset_state(&state->macro);
       break;
 
+    case AK_TYPE_TAP_DANCE:
+      advanced_key_tap_dance_reset_state(&state->tap_dance);
+      break;
+
     default:
       break;
     }
@@ -394,6 +680,10 @@ void advanced_key_clear(void) {
 
     case AK_TYPE_MACRO:
       advanced_key_macro_stop(&state->macro, ak->key);
+      break;
+
+    case AK_TYPE_TAP_DANCE:
+      advanced_key_macro_stop(&state->tap_dance.macro, ak->key);
       break;
 
     default:
@@ -428,6 +718,10 @@ void advanced_key_process(const advanced_key_event_t *event) {
 
   case AK_TYPE_MACRO:
     advanced_key_macro(event);
+    break;
+
+  case AK_TYPE_TAP_DANCE:
+    advanced_key_tap_dance(event);
     break;
 
   default:
@@ -465,44 +759,11 @@ void advanced_key_tick(bool has_non_tap_hold_press) {
       break;
 
     case AK_TYPE_MACRO:
-      if (state->macro.current_node != MACRO_NODE_NONE &&
-          state->macro.current_node < NUM_MACRO_NODES) {
-        const macro_node_t *current_node =
-            &CURRENT_PROFILE.macros[state->macro.current_node];
+      advanced_key_macro_advance(&state->macro, ak->key);
+      break;
 
-        bool delay_elapsed =
-            timer_elapsed(state->macro.since) >= current_node->delay;
-        switch (current_node->action) {
-        case MACRO_ACTION_TAP:
-          // Run the next macro step in a different matrix scan than the one
-          // that unregistered the key in the case of consecutive taps of the
-          // same keycode.
-          if (state->macro.deferred_tap_ticks > 0) {
-            state->macro.deferred_tap_ticks--;
-            if (state->macro.deferred_tap_ticks == 0) {
-              layout_unregister(ak->key, current_node->keycode);
-              advanced_key_macro_remove_active_keycode(&state->macro,
-                                                       current_node->keycode);
-            }
-          } else if (state->macro.deferred_tap_ticks == 0 && delay_elapsed) {
-            // Unlike other actions, we wait for both the delay and the
-            // deferred tap ticks to elapse before running the next step.
-            advanced_key_macro_run_step(&state->macro, ak->key,
-                                        current_node->next);
-          }
-          break;
-
-        case MACRO_ACTION_PRESS:
-        case MACRO_ACTION_RELEASE:
-          if (delay_elapsed)
-            advanced_key_macro_run_step(&state->macro, ak->key,
-                                        current_node->next);
-          break;
-
-        default:
-          break;
-        }
-      }
+    case AK_TYPE_TAP_DANCE:
+      advanced_key_tap_dance_tick(ak, &state->tap_dance);
       break;
 
     default:

@@ -105,6 +105,46 @@ typedef struct {
 } ak_state_macro_t;
 
 //--------------------------------------------------------------------+
+// Tap Dance State
+//--------------------------------------------------------------------+
+
+// Tap Dance stage
+typedef enum {
+  TAP_DANCE_STAGE_NONE = 0,
+  // Counting taps until the tapping term passes without a new press
+  TAP_DANCE_STAGE_PENDING,
+  // Running the chosen actions
+  TAP_DANCE_STAGE_RUNNING,
+  // Last action done, its keys stay pressed until the key is released
+  TAP_DANCE_STAGE_HELD,
+} ak_tap_dance_stage_t;
+
+// Tap Dance state
+typedef struct {
+  // Runs the action macros
+  ak_state_macro_t macro;
+  // Time of the last press
+  uint32_t since;
+  // Time of a press that arrived while the previous dance was still running
+  uint32_t restart_since;
+  uint8_t stage;
+  // Number of taps so far
+  uint8_t count;
+  bool is_pressed;
+  // A new dance waits for the running one to finish
+  bool restart;
+  bool restart_pressed;
+  // Actions to run: `first` `first_left` more times, each released when done,
+  // then `last` once, whose keys stay pressed while the key is held
+  macro_node_id_t first;
+  uint8_t first_left;
+  macro_node_id_t last;
+  bool on_last;
+  // Ticks to keep a finished run's keys pressed before releasing them
+  uint8_t release_ticks;
+} ak_state_tap_dance_t;
+
+//--------------------------------------------------------------------+
 // Advanced Key State
 //--------------------------------------------------------------------+
 
@@ -115,6 +155,7 @@ typedef union {
   ak_state_tap_hold_t tap_hold;
   ak_state_toggle_t toggle;
   ak_state_macro_t macro;
+  ak_state_tap_dance_t tap_dance;
 } advanced_key_state_t;
 
 //--------------------------------------------------------------------+
@@ -184,3 +225,22 @@ void advanced_key_process(const advanced_key_event_t *event);
  * @return None
  */
 void advanced_key_tick(bool has_non_tap_hold_press);
+
+/**
+ * @brief Whether a Tap Dance is still deciding or still sending its action
+ *
+ * While this is true, other key presses wait, so that they reach the host
+ * after the Tap Dance output.
+ *
+ * @return true if a Tap Dance is busy, false otherwise
+ */
+bool advanced_key_tap_dance_busy(void);
+
+/**
+ * @brief Resolve every undecided Tap Dance now, as interrupted
+ *
+ * Called when another key is pressed during a dance, like QMK.
+ *
+ * @return None
+ */
+void advanced_key_tap_dance_interrupt(void);
