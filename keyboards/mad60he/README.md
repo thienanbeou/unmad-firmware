@@ -12,7 +12,7 @@ three repos:
 Unofficial; not made or supported by Madlions. You flash it at your own risk,
 but going back to the stock firmware is one command (below).
 
-## Quick start (from the stock firmware)
+## Quick start (from the stock firmware or an older Unmad release)
 
 You need: the keyboard plugged in by USB, Python 3, and the
 [release files](https://github.com/thienanbeou/unmad-firmware/releases)
@@ -39,7 +39,12 @@ You need: the keyboard plugged in by USB, Python 3, and the
    https://thienanbeou.github.io/unmad-configurator/. Keymap, per-key
    actuation and Rapid Trigger, tap dance and other advanced keys, macros,
    lighting, WASD swap / Win lock / 6KRO, and from v1.1 Mac mode and the
-   Caps Lock indicator.
+   Caps Lock indicator (its colour and brightness in the Lighting tab).
+
+Upgrading from v1.0 is the same flash command. Your settings are kept and
+upgraded on the first start, nothing is reset. Your saved keymap stays as it
+is, so Fn + M only becomes Mac mode if you bind it (Special keycodes: Mac
+Mode) or use the switch in Settings. Reload the configurator page afterwards.
 
 If the keyboard ever stops responding (firmware v1.1+): unplug it, hold
 **Esc**, plug it in and let go. It starts in the bootloader, ready for
@@ -51,7 +56,8 @@ The stock layout (read from the official 1.06 firmware), 1.5 mm actuation
 on every key. Blank = transparent (the layer below shows through), `--` =
 no key: stock had its RGB controls there; set lighting in the
 configurator. Win/Mac mode is Fn + M as on stock (firmware v1.1; the v1.0
-release has nothing there). Generated from `keyboard.json`.
+release has nothing there, and an upgrade keeps your saved keymap). Generated
+from `keyboard.json`.
 
 ```
 Layer 0 (base)
@@ -164,8 +170,9 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   in). QMK's `TG` (toggle a layer) is Layer Lock here: hold Fn and press
   Layer Lock to keep layer 1 on, the same again to leave it.
 - Tap dance is an advanced key type of this fork (not in upstream libhmk);
-  edit it in the Unmad configurator. Upstream hmkconf lists tap dances as "?"
-  and corrupts them on save.
+  edit it in the Unmad configurator. Upstream hmkconf (hmkconf.com) lists tap
+  dances as "?" and corrupts them on save, and it clears the switches above
+  (option bits 3-7) when it saves the settings: use the Unmad configurator.
 - Flash use: firmware at 0x08020000, settings in sector 11, stock settings in
   sectors 1-3 never written, sector 0 (bootloader) written only by
   COMMAND_INSTALL_BOOTLOADER.

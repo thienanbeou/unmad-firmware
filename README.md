@@ -33,9 +33,17 @@ This repository contains libraries for building a Hall-effect keyboard firmware.
 - [x] **8kHz Polling Rate**: Support for 8kHz polling rate on some microcontrollers (e.g., AT32F405xx).
 - [x] **Gamepad**: Support for XInput gamepad mode, allowing the keyboard to be used as a game controller.
 
+Added in this fork (MAD60 HE, configured with [unmad-configurator](https://thienanbeou.github.io/unmad-configurator/); details in [keyboards/mad60he](keyboards/mad60he/README.md)):
+
+- [x] **RGB Lighting**: All 52 QMK RGB Matrix effects, a colour range for the rainbow effects, per-key colours, and a Caps Lock indicator with its own colour and brightness.
+- [x] **Tap Dance**: A different action (each one a macro) for tap, hold, double tap and tap-then-hold.
+- [x] **Stock switches**: WASD swap, Win lock, 6KRO and Mac mode, as settings and as keys.
+- [x] **QMK extras**: Grave Escape, Repeat Key and Bootmagic (Esc held while plugging in starts the bootloader).
+- [x] **Rescue**: A build that crashes or hangs drops into the bootloader by itself.
+
 ## Limitations
 
-- **RGB Lighting**: The firmware does not support RGB lighting.
+- **RGB Lighting**: Only on the MAD60 HE (this fork's `src/rgb.c` and its WS2812 driver). Upstream libhmk has no lighting, and the other keyboards here still have none.
 
 ## Getting Started
 
@@ -49,8 +57,10 @@ This repository contains libraries for building a Hall-effect keyboard firmware.
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/peppapighs/libhmk.git
+   git clone https://github.com/thienanbeou/unmad-firmware.git
    ```
+
+   (This fork; its default branch is `unmad`. Upstream is `https://github.com/peppapighs/libhmk.git`, which has no MAD60 HE.)
 
 2. Open the project in PlatformIO, such as through Visual Studio Code.
 
@@ -62,11 +72,13 @@ This repository contains libraries for building a Hall-effect keyboard firmware.
    - `firmware.bin`: The binary firmware file
    - `firmware.elf`: The ELF firmware file
 
+   For the MAD60 HE, flash with `fwtool.py` instead (it needs the raw image, not `firmware.bin`): see [keyboards/mad60he](keyboards/mad60he/README.md).
+
 6. Flash the firmware to your keyboard using your preferred method (e.g., DFU, ISP). If your keyboard has a DFU bootloader, you can set `upload_protocol = dfu` in `platformio.ini` and use the command `pio run --target upload` or the PlatformIO IDE's "Upload" option while the keyboard is in DFU mode. If your browser supports WebUSB, you can also use [WebUSB DFU](https://devanlai.github.io/webdfu/dfu-util/) (Recommended method).
 
 ## Development
 
-The development branch is `dev`, which contains the latest features and bug fixes. The corresponding `dev` branch of [hmkconf](https://github.com/peppapighs/hmkconf/tree/dev) deployed at [https://dev.hmkconf.com](https://dev.hmkconf.com) is required to configure the `dev` branch of the firmware. To contribute, please create a pull request against the `dev` branch.
+In this fork, MAD60 HE work happens on `unmad`, with [unmad-configurator](https://github.com/thienanbeou/unmad-configurator). Upstream's development branch is `dev`, which contains the latest features and bug fixes. The corresponding `dev` branch of [hmkconf](https://github.com/peppapighs/hmkconf/tree/dev) deployed at [https://dev.hmkconf.com](https://dev.hmkconf.com) is required to configure the `dev` branch of the firmware. To contribute, please create a pull request against the `dev` branch.
 
 ### Developing a New Keyboard
 
