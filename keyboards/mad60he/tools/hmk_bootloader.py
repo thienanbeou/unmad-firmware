@@ -53,7 +53,7 @@ def read_sector0(dev):
         n = min(60, 0x08000000 + SECTOR0 - a)
         r = cmd(dev, [0xE4, *struct.pack("<I", a), n])
         if r is None:
-            raise SystemExit("read refused: is libhmk_mad60he_v17diag / v17boot on the board?")
+            raise SystemExit("read refused: is the Unmad firmware (v1.0 or later) running?")
         out += r[1:1 + n]
     return out
 
@@ -95,7 +95,7 @@ def main():
     for off in range(0, len(image), 60):
         chunk = image[off:off + 60]
         if cmd(dev, [0xE5, *struct.pack("<H", off), len(chunk), *chunk]) is None:
-            raise SystemExit(f"staging refused at {off:#x} (not the v17boot build?); nothing written")
+            raise SystemExit(f"staging refused at {off:#x} (is the Unmad firmware v1.0 or later running?); nothing written")
     print(f"staged {len(image)} bytes, crc {zlib.crc32(image):#010x}; writing sector 0, do not unplug")
     r = cmd(dev, [0xE6, *struct.pack("<II", len(image), zlib.crc32(image)), *b"BOOT"], timeout=15)
     print("firmware reports", "success" if r else "FAILURE (the app keeps running; do not unplug)")
