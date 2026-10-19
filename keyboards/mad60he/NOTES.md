@@ -54,7 +54,9 @@ other and back keeps both (tested both ways).
   (unverified).
 - RGB: 61 WS2812-type LEDs on PC9 = TIM3_CH4 (AF2), fed by DMA1 stream 2
   channel 5. The stock firmware uses a 12.5 us bit period (WS2812 decodes the
-  high time, so the long period works).
+  high time, so the long period works) and streams the frame nonstop; this
+  port keeps the timing but sends a frame only when an LED changed (see the
+  rest noise note below).
 - SWD: PA13 / PA14 stay as debug pins; PB3 (SWO) is reused as a column.
 - ST's (and Geehy's) ROM DFU only drives OTG_FS on PA11 / PA12, which are
   matrix columns here, so the ROM bootloader can never reach the USB port.

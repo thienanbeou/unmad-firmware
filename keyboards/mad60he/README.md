@@ -150,8 +150,10 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
 
 - Matrix: 14 columns driven one at a time (active low), 5 rows read by ADC1
   (PA3, PA2, PA0, PA1, PA7), no multiplexer chips; each row is sampled 3
-  times per column and averaged (`ADC_OVERSAMPLE`), so rest noise is about 1
-  ADC count (fine enough for 0.05 mm actuation).
+  times per column and averaged (`ADC_OVERSAMPLE`), 10 us after switching
+  the column. Rest noise is about 0.4 ADC counts (fine enough for 0.05 mm
+  actuation); the bottom row reads about 2.6 while a moving lighting effect
+  runs, because the LED data line couples into that row's sensor line.
 - USB: OTG_HS core, embedded full-speed PHY (PB14/PB15).
 - RGB: 61 WS2812 on PC9 (driver `src/hardware/stm32f405xx/rgb.c`, effects
   `src/rgb.c`: all of QMK's RGB Matrix effects, 52 from v1.1 (21 in v1.0,
