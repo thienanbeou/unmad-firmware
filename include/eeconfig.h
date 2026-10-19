@@ -152,6 +152,9 @@ typedef struct __attribute__((packed)) {
   uint8_t caps_hue;
   uint8_t caps_sat;
   uint8_t caps_val;
+  // White balance (added in v1.9): R, G, B gain applied to every LED, 255 =
+  // unchanged. The LEDs are not colour balanced (white can look blue-green).
+  uint8_t white_balance[3];
 } eeconfig_rgb_t;
 #endif
 
@@ -169,7 +172,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0108
+#define EECONFIG_VERSION 0x0109
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -195,7 +198,7 @@ typedef struct __attribute__((packed)) {
   uint8_t last_non_default_profile;
 #if defined(RGB_NUM_LEDS)
   // Lighting configuration (added in v1.6 of this fork, hue_range in v1.7,
-  // the Caps Lock colour in v1.8)
+  // the Caps Lock colour in v1.8, the white balance in v1.9)
   eeconfig_rgb_t rgb;
 #endif
   // End of global configurations
@@ -249,6 +252,7 @@ extern const eeconfig_t *eeconfig;
       .caps_hue = 0,                                                           \
       .caps_sat = 0,                                                           \
       .caps_val = RGB_DEFAULT_VAL,                                             \
+      .white_balance = {255, 255, 255},                                        \
   }
 #endif
 

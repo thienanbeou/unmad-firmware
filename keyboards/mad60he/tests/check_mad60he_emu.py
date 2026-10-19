@@ -285,9 +285,27 @@ if "rgb_slots" in syms:
     for k, led in enumerate(key_leds):
         want[led] = tuple((c * 256) >> 8 for c in colors[k])  # scale8(c, 255)
     assert got == want, f"per-key colours: {bad(got, want)}"
+    # White balance (v1.9): each channel of every LED scaled, 255 = unchanged
+    ok, out = command(0xE9)
+    wb_note = "no white balance in this build"
+    if ok:
+        assert list(out[1:4]) == [255, 255, 255], f"GET_RGB_WHITE_BALANCE {list(out[1:4])}"
+        gain = (255, 128, 64)
+        ok, _ = command(0xEA, *gain)
+        ok2, out = command(0xE9)
+        assert ok and list(out[1:4]) == list(gain), f"white balance readback {list(out[1:4])}"
+        frame(TICK + 120)
+        got = leds()
+        for k, led in enumerate(key_leds):
+            want[led] = tuple((c * (1 + g)) >> 8 for c, g in zip(colors[k], gain))
+        assert got == want, f"white balance: {bad(got, want)}"
+        ok, _ = command(0xEA, 255, 255, 255)
+        frame(TICK + 160)
+        assert leds()[key_leds[0]] == colors[0], "white balance back to 255"
+        wb_note = "white balance scales every LED and reads back"
     print("10 RGB: TIM3/DMA1/PC9 as stock; default Rainbow Pinwheels matches the "
           "reference; colour range 0 / 60 / 254 match the reference; GET/SET_RGB, range check, solid colour, per-key colours and "
-          "the custom effect all verified")
+          f"the custom effect all verified; {wb_note}")
 
     # 11. Every effect renders frames without faulting (each frame returns to
     # the caller, watchdog refreshed), and the reactive effects answer a key

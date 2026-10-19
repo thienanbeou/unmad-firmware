@@ -98,6 +98,12 @@ static uint8_t qadd8(uint8_t i, uint8_t j) {
 
 static uint8_t qsub8(uint8_t i, uint8_t j) { return i > j ? i - j : 0; }
 
+// Every LED write goes through the white balance (255 = unchanged)
+static void led_set(uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
+  const uint8_t *wb = eeconfig->rgb.white_balance;
+  rgb_driver_set(led, scale8(r, wb[0]), scale8(g, wb[1]), scale8(b, wb[2]));
+}
+
 static uint8_t abs8(int8_t i) { return i < 0 ? -i : i; }
 
 static uint8_t sin8(uint8_t theta) {
@@ -194,12 +200,12 @@ static rgb_t hsv_to_rgb(hsv_t hsv) {
 
 static void set_hsv(uint8_t i, hsv_t hsv) {
   const rgb_t rgb = hsv_to_rgb(hsv);
-  rgb_driver_set(i, rgb.r, rgb.g, rgb.b);
+  led_set(i, rgb.r, rgb.g, rgb.b);
 }
 
 static void set_all(uint8_t r, uint8_t g, uint8_t b) {
   for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
-    rgb_driver_set(i, r, g, b);
+    led_set(i, r, g, b);
 }
 
 //--------------------------------------------------------------------+
@@ -238,7 +244,7 @@ static void effect_custom(void) {
   for (uint8_t k = 0; k < NUM_KEYS; k++) {
     const uint8_t *c = eeconfig->rgb.key_colors[k];
     if (key_leds[k] != RGB_NO_LED)
-      rgb_driver_set(key_leds[k], scale8(c[0], base.v), scale8(c[1], base.v),
+      led_set(key_leds[k], scale8(c[0], base.v), scale8(c[1], base.v),
                      scale8(c[2], base.v));
   }
 }
@@ -396,11 +402,11 @@ static void effect_digital_rain(bool init) {
                       (*cell - pure_green_intensity) /
                       (max_intensity - pure_green_intensity));
         // The drop's head turns towards white
-        rgb_driver_set(led, M_MIN(qadd8(color.r, boost), max_intensity),
+        led_set(led, M_MIN(qadd8(color.r, boost), max_intensity),
                        M_MIN(qadd8(color.g, boost), max_intensity),
                        M_MIN(qadd8(color.b, boost), max_intensity));
       } else {
-        rgb_driver_set(
+        led_set(
             led, (uint8_t)((uint16_t)color.r * *cell / pure_green_intensity),
             (uint8_t)((uint16_t)color.g * *cell / pure_green_intensity),
             (uint8_t)((uint16_t)color.b * *cell / pure_green_intensity));
@@ -771,7 +777,7 @@ static void effect_pixel_flow(bool init) {
       led[j] = hsv_to_rgb(pixel_hsv());
   }
   for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
-    rgb_driver_set(i, led[i].r, led[i].g, led[i].b);
+    led_set(i, led[i].r, led[i].g, led[i].b);
   memmove(&led[0], &led[1], (RGB_NUM_LEDS - 1) * sizeof(rgb_t));
   led[RGB_NUM_LEDS - 1] = hsv_to_rgb(pixel_hsv());
   wait_timer = rgb_timer + 3000u / scale16by8(qadd8(speed, 16), 16);
@@ -794,9 +800,9 @@ static void effect_pixel_fractal(bool init) {
       const uint8_t l = matrix_leds[row][col];
       const uint8_t r = matrix_leds[row][RGB_MATRIX_COLS - 1 - col];
       if (l != RGB_NO_LED)
-        rgb_driver_set(l, c.r, c.g, c.b);
+        led_set(l, c.r, c.g, c.b);
       if (r != RGB_NO_LED)
-        rgb_driver_set(r, c.r, c.g, c.b);
+        led_set(r, c.r, c.g, c.b);
     }
     // Shift towards the outside, a new pixel enters in the middle
     memmove(lit[row], lit[row] + 1, (MID_COL - 1) * sizeof(bool));
@@ -816,9 +822,9 @@ static void effect_flower_blooming(void) {
                         (lower ? time : -(int16_t)time));
     const rgb_t rgb = hsv_to_rgb(hsv);
     if (lower)
-      rgb_driver_set(i, rgb.b, rgb.g, rgb.r);
+      led_set(i, rgb.b, rgb.g, rgb.r);
     else
-      rgb_driver_set(i, rgb.r, rgb.g, rgb.b);
+      led_set(i, rgb.r, rgb.g, rgb.b);
   }
 }
 
@@ -1095,7 +1101,7 @@ void rgb_task(void) {
     const eeconfig_rgb_t *cfg = &eeconfig->rgb;
     const rgb_t c = hsv_to_rgb((hsv_t){
         cfg->caps_hue, cfg->caps_sat, M_MIN(cfg->caps_val, RGB_MAX_BRIGHTNESS)});
-    rgb_driver_set(key_leds[RGB_CAPS_LOCK_KEY], c.r, c.g, c.b);
+    led_set(key_leds[RGB_CAPS_LOCK_KEY], c.r, c.g, c.b);
   }
 #endif
 }
@@ -1165,6 +1171,13 @@ bool rgb_command(const uint8_t *in, uint8_t *out) {
     const uint8_t caps[3] = {in[1], in[2], M_MIN(in[3], RGB_MAX_BRIGHTNESS)};
     return EECONFIG_WRITE_N(rgb.caps_hue, caps, sizeof(caps));
   }
+  case COMMAND_GET_RGB_WHITE_BALANCE:
+    // R, G, B gain (255 = unchanged)
+    memcpy(&out[1], eeconfig->rgb.white_balance, 3);
+    return true;
+  case COMMAND_SET_RGB_WHITE_BALANCE:
+    // R, G, B gain
+    return EECONFIG_WRITE_N(rgb.white_balance, &in[1], 3);
   default:
     return false;
   }

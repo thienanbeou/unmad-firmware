@@ -72,6 +72,9 @@ typedef enum {
   // Lighting: the Caps Lock indicator colour (src/rgb.c)
   COMMAND_GET_RGB_CAPS,
   COMMAND_SET_RGB_CAPS,
+  // Lighting: the white balance (src/rgb.c)
+  COMMAND_GET_RGB_WHITE_BALANCE,
+  COMMAND_SET_RGB_WHITE_BALANCE,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
