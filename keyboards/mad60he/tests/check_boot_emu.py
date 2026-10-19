@@ -338,7 +338,10 @@ if STOCK:
 # 7. image
 sp, reset = struct.unpack_from("<II", BOOT)
 assert len(BOOT) <= 0x4000 and sp == 0x20010000 and 0x08000000 < reset < 0x08000000 + len(BOOT)
-assert "Unmad bootloader v4".encode() in BOOT, "version string"
+assert "Unmad bootloader v5".encode() in BOOT, "version string"
+# v5: configuration descriptor bus powered, no remote wakeup (bmAttributes 0x80)
+cfg = BOOT.find(bytes([0x09, 0x02, 0x29, 0x00, 0x01, 0x01, 0x00]))
+assert cfg > 0 and BOOT[cfg + 7] == 0x80, f"bmAttributes {BOOT[cfg + 7]:#x}"
 print(f"7 image: {len(BOOT)} of 16384 bytes, SP {sp:#x} (below the rescue words), "
       f"reset {reset:#x}")
 print("all ok")
