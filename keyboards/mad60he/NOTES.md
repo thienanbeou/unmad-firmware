@@ -45,7 +45,9 @@ other and back keeps both (tested both ways).
   **active low** (all high when idle): PA8, PA9, PA10, PA11, PA12, PA15, PC10,
   PC11, PC12, PD2, PB3, PB4, PB5, PB6. 5 rows read as analog by ADC1: PA3
   (ch3), PA2 (ch2), PA0 (ch0), PA1 (ch1), PA7 (ch7). About 20 us settle time
-  after switching a column. 12-bit readings: rest about 1850-2060, bottomed
+  after switching a column (libhmk's default; on the board the rest readings
+  do not move even at 2 us, measured 2026-10-19, but crosstalk from a
+  pressed key in the previous column was not measured). 12-bit readings: rest about 1850-2060, bottomed
   out about 1110-1160; the reading falls as the key goes down.
 - Extra analog input PB1 (ch9). The stock firmware only scans while PB1 and
   VREFINT are above thresholds; PB1 probably senses the Hall sensor supply
@@ -57,6 +59,15 @@ other and back keeps both (tested both ways).
 - ST's (and Geehy's) ROM DFU only drives OTG_FS on PA11 / PA12, which are
   matrix columns here, so the ROM bootloader can never reach the USB port.
   That is why the board needs its own bootloader in sector 0.
+
+- Rest noise of the filtered reading (COMMAND_ANALOG_INFO, 3x oversampling,
+  libhmk's 1/16 filter, measured 2026-10-19): standard deviation about 0.4
+  counts on rows 0-3, about 2.6 on the bottom row (keys 53-60, ADC PA7),
+  peak to peak up to about 19 there. The filter rounds down, so it ignores
+  upward moves under 16 counts; that hides most of the rest noise. A 1/8
+  filter (`MATRIX_EMA_ALPHA_EXPONENT 3`) let it through: keys rested at 4 of
+  255 travel, which is the trigger point of a 0.05 mm actuation. Keep 1/16
+  unless no key uses an actuation that low.
 
 ## USB IDs
 
