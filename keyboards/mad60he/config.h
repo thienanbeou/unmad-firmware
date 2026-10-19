@@ -84,6 +84,12 @@
 #define BOOTMAGIC_KEY 0
 #define BOOTMAGIC_MIN_ADC 2600
 
+// Settle time after switching a column (libhmk default 20 us). On the board
+// the rest readings do not move even at 2 us, and holding a key leaks nothing
+// into the key scanned next at 10 us (measured 2026-10-19). Scan of all keys
+// about 0.69 -> 0.55 ms.
+#define ADC_SAMPLE_DELAY 10
+
 // Bring-up only, off for daily use (a PC asleep at power-up would otherwise
 // send the board to the bootloader):
 // #define BOARD_RESCUE_NO_USB_MS 10000
