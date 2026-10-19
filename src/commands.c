@@ -478,7 +478,9 @@ static void command_process(void) {
   case COMMAND_GET_RGB_CAPS:
   case COMMAND_SET_RGB_CAPS:
   case COMMAND_GET_RGB_WHITE_BALANCE:
-  case COMMAND_SET_RGB_WHITE_BALANCE: {
+  case COMMAND_SET_RGB_WHITE_BALANCE:
+  case COMMAND_GET_RGB_LAYER:
+  case COMMAND_SET_RGB_LAYER: {
     success = rgb_command(in_buf, out_buf);
     break;
   }

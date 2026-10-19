@@ -8,6 +8,7 @@ Peripherals are a flat shadow with the ready bits boot code polls on. No
 interrupts run, so a boot stops where analog_init waits for the first ADC scan,
 which is after clocks, USB, wear leveling and all pin setup.
 """
+import json
 import struct
 import sys
 from pathlib import Path
@@ -485,9 +486,46 @@ if "rgb_slots" in syms:
         assert leds()[caps] != (210, 210, 210), "white stayed after Caps Lock off"
         print("11b Caps Lock indicator: own colour on the Caps key over any effect "
               "(default white 210, set / read back red and blue), off with option bit 7, "
-              "cleared by a redraw when it goes off")
+              "the effect's own colour back when it goes off")
     else:
         print("11b Caps Lock indicator: not in this build")
+
+    # 11c. Layer indicator (v1.2): while a layer other than 0 is on, its keys
+    # that do something (not transparent / no key) light in the layer colour
+    # (default blue at the default brightness) over the effect; when the layer
+    # goes off the effect's own colours come back; option bit 8 turns it off
+    ok, out = command(0xEB)
+    if ok and "layer_mask" in syms:
+        keymap1 = json.loads((BOARD / "keyboard.json").read_text())["keymap"][1]
+        lit = {key_leds[k] for k, kc in enumerate(keymap1) if kc not in ("KC_TRNS", "KC_NO")}
+        blue = hsv(170, 255, int(cfg["RGB_DEFAULT_VAL"]))
+        assert list(out[1:4]) == [170, 255, int(cfg["RGB_DEFAULT_VAL"])], f"GET_RGB_LAYER {list(out[1:4])}"
+        ok, _ = command(0xE1, 2, 0, 255, 120, 70, 255)            # solid red at 120
+        red = hsv(0, 255, 120)
+        opts_addr = b.r32(syms["eeconfig"]) + 132
+        opts = int.from_bytes(bytes(b.uc.mem_read(opts_addr, 2)), "little")
+        b.uc.mem_write(syms["layer_mask"], (1 << 1).to_bytes(2, "little"))
+        tick += 40
+        frame(tick)
+        got = leds()
+        want = [blue if i in lit else red for i in range(61)]
+        assert lit and got == want, f"layer 1 indicator: {bad(got, want)}"
+        b.uc.mem_write(opts_addr, (opts | 1 << 8).to_bytes(2, "little"))
+        tick += 40
+        frame(tick)
+        assert leds() == [red] * 61, "layer indicator disabled but lit"
+        b.uc.mem_write(opts_addr, opts.to_bytes(2, "little"))
+        b.uc.mem_write(syms["layer_mask"], b"\0\0")
+        tick += 40
+        frame(tick)
+        assert leds() == [red] * 61, f"effect not back after the layer: {bad(leds(), [red] * 61)}"
+        ok, _ = command(0xEC, 85, 255, 255)
+        ok2, out = command(0xEB)
+        assert ok and list(out[1:4]) == [85, 255, min(255, int(cfg["RGB_MAX_BRIGHTNESS"]))], "SET_RGB_LAYER"
+        print(f"11c layer indicator: layer 1's {len(lit)} bound keys blue over the effect, the rest "
+              "unchanged, effect back when the layer goes off, off with option bit 8, colour set / read back")
+    else:
+        print("11c layer indicator: not in this build")
 else:
     print("10 RGB: not in this build")
 

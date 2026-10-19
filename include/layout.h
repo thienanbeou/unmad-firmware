@@ -46,6 +46,13 @@ void layout_load_advanced_keys(void);
 void layout_task(void);
 
 /**
+ * @brief Current layer (the highest active layer, else the default layer)
+ *
+ * @return Layer index
+ */
+uint8_t layout_current_layer(void);
+
+/**
  * @brief Manually register a key press
  *
  * @param key Key code

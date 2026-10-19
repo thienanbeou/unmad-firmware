@@ -174,10 +174,17 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   the last key with its modifiers), Bootmagic Lite (Esc held while plugging
   in). QMK's `TG` (toggle a layer) is Layer Lock here: hold Fn and press
   Layer Lock to keep layer 1 on, the same again to leave it.
+- QMK layer keys (v1.2, the Layers section of the configurator's key list):
+  `TO(n)` (only layer n stays on), `DF(n)` (layer n becomes the default
+  until a restart), One Shot `OSL(n)` and `OSM` (tap: the layer or modifier
+  applies to the next key; held: like MO / the plain modifier), and Tri
+  Layer Lower / Upper (MO(1) / MO(2), both held: layer 3). A layer indicator
+  lights the keys that do something on the active layer (any layer but 0)
+  in its own colour (blue by default; option bit 8 turns it off).
 - Tap dance is an advanced key type of this fork (not in upstream libhmk);
   edit it in the Unmad configurator. Upstream hmkconf (hmkconf.com) lists tap
   dances as "?" and corrupts them on save, and it clears the switches above
-  (option bits 3-7) when it saves the settings: use the Unmad configurator.
+  (option bits 3-8) when it saves the settings: use the Unmad configurator.
 - Flash use: firmware at 0x08020000, settings in sector 11, stock settings in
   sectors 1-3 never written, sector 0 (bootloader) written only by
   COMMAND_INSTALL_BOOTLOADER.

@@ -65,6 +65,63 @@ __attribute__((always_inline)) static inline void layout_layer_lock(void) {
   default_layer = current_layer == default_layer ? 0 : current_layer;
 }
 
+uint8_t layout_current_layer(void) { return layout_get_current_layer(); }
+
+// QMK Tri Layer (this fork): Lower and Upper turn on these layers, both
+// together also the adjust layer
+#define TRI_LAYER_LOWER 1
+#define TRI_LAYER_UPPER 2
+#define TRI_LAYER_ADJUST 3
+
+static void layout_update_tri_layer(void) {
+  const uint16_t both = (1 << TRI_LAYER_LOWER) | (1 << TRI_LAYER_UPPER);
+  if ((layer_mask & both) == both)
+    layout_layer_on(TRI_LAYER_ADJUST);
+  else
+    layout_layer_off(TRI_LAYER_ADJUST);
+}
+
+// One Shot keys (this fork, QMK OSM / OSL). A tapped OSM / OSL key arms its
+// modifier or layer for the next key: the layer turns off once that key is
+// pressed, the modifier once it is released. A key pressed while an OSM / OSL
+// key is still held makes them plain held keys instead.
+static uint8_t oneshot_mods;   // bit m = OSM(m) armed
+static uint8_t oneshot_layers; // bit n = OSL(n) armed
+static uint8_t oneshot_held;   // OSM / OSL keys held down
+static bool oneshot_interrupted;
+// Key whose release ends the armed modifiers (NUM_KEYS: none)
+static uint8_t oneshot_trigger_key = NUM_KEYS;
+
+// Only send reports if they changed
+static bool should_send_reports;
+
+/**
+ * @brief Let a key press use the armed One Shot modifiers and layers
+ *
+ * @param key Key index
+ *
+ * @return None
+ */
+static void layout_oneshot_consume(uint8_t key) {
+  if (oneshot_held) {
+    oneshot_interrupted = true;
+    return;
+  }
+  layer_mask &= ~oneshot_layers;
+  oneshot_layers = 0;
+  if (oneshot_mods && oneshot_trigger_key == NUM_KEYS)
+    oneshot_trigger_key = key;
+}
+
+static void layout_oneshot_release_mods(void) {
+  for (uint32_t m = 0; m < 8; m++)
+    if ((oneshot_mods >> m) & 1)
+      hid_keycode_remove(KC_LEFT_CTRL + m);
+  oneshot_mods = 0;
+  oneshot_trigger_key = NUM_KEYS;
+  should_send_reports = true;
+}
+
 /**
  * @brief Get the keycode of a key
  *
@@ -137,8 +194,6 @@ static void layout_toggle_option(uint8_t keycode) {
   EECONFIG_WRITE(options, &options);
 }
 
-// Only send reports if they changed
-static bool should_send_reports;
 // Whether the key is disabled by `SP_KEY_LOCK`
 static bitmap_t key_disabled[] = MAKE_BITMAP(NUM_KEYS);
 
@@ -257,6 +312,8 @@ void layout_task(void) {
         layout_register(i, keycode);
         has_non_tap_hold_press |= (keycode != KC_NO);
       }
+      if (ak_index || !(SP_OSL_MIN <= keycode && keycode <= SP_OSM_MAX))
+        layout_oneshot_consume(i);
     } else if (!is_pressed & last_key_press) {
       // Key release event
       const uint8_t keycode = active_keycodes[i];
@@ -275,6 +332,8 @@ void layout_task(void) {
         active_keycodes[i] = KC_NO;
         layout_unregister(i, keycode);
       }
+      if (i == oneshot_trigger_key)
+        layout_oneshot_release_mods();
     } else if (is_pressed) {
       // Key hold event
       const uint8_t keycode = active_keycodes[i];
@@ -353,6 +412,46 @@ void layout_register(uint8_t key, uint8_t keycode) {
     layout_set_profile(PF_GET_PROFILE(keycode));
     break;
 
+  case TO_LAYER_RANGE:
+    if (LAYER_KEY_GET_LAYER(keycode) < NUM_LAYERS) {
+      // Only that layer stays on (over the default layer)
+      const uint8_t layer = LAYER_KEY_GET_LAYER(keycode);
+      layer_mask = layer == default_layer ? 0 : 1 << layer;
+      oneshot_layers = 0;
+    }
+    break;
+
+  case DEFAULT_LAYER_RANGE:
+    if (LAYER_KEY_GET_LAYER(keycode) < NUM_LAYERS)
+      default_layer = LAYER_KEY_GET_LAYER(keycode);
+    break;
+
+  case ONE_SHOT_LAYER_RANGE:
+    oneshot_held++;
+    oneshot_interrupted = false;
+    if (LAYER_KEY_GET_LAYER(keycode) < NUM_LAYERS) {
+      layout_layer_on(LAYER_KEY_GET_LAYER(keycode));
+      oneshot_layers |= 1 << LAYER_KEY_GET_LAYER(keycode);
+    }
+    break;
+
+  case ONE_SHOT_MOD_RANGE:
+    oneshot_held++;
+    oneshot_interrupted = false;
+    oneshot_mods |= 1 << (keycode & 0x07);
+    hid_keycode_add(OSM_GET_MODIFIER(keycode));
+    should_send_reports = true;
+    break;
+
+  case SP_TRI_LAYER_LOWER:
+  case SP_TRI_LAYER_UPPER:
+    if (TRI_LAYER_ADJUST < NUM_LAYERS) {
+      layout_layer_on(keycode == SP_TRI_LAYER_LOWER ? TRI_LAYER_LOWER
+                                                    : TRI_LAYER_UPPER);
+      layout_update_tri_layer();
+    }
+    break;
+
   case SP_KEY_LOCK:
     bitmap_toggle(key_disabled, key);
     break;
@@ -418,6 +517,36 @@ void layout_unregister(uint8_t key, uint8_t keycode) {
 
   case MOMENTARY_LAYER_RANGE:
     layout_layer_off(MO_GET_LAYER(keycode));
+    break;
+
+  case ONE_SHOT_LAYER_RANGE:
+    if (oneshot_held)
+      oneshot_held--;
+    if (oneshot_interrupted) {
+      // Used like MO: off with the key
+      layout_layer_off(LAYER_KEY_GET_LAYER(keycode));
+      oneshot_layers &= ~(1 << LAYER_KEY_GET_LAYER(keycode));
+    }
+    break;
+
+  case ONE_SHOT_MOD_RANGE:
+    if (oneshot_held)
+      oneshot_held--;
+    if (oneshot_interrupted) {
+      // Used like the plain modifier: released with the key
+      hid_keycode_remove(OSM_GET_MODIFIER(keycode));
+      oneshot_mods &= ~(1 << (keycode & 0x07));
+      should_send_reports = true;
+    }
+    break;
+
+  case SP_TRI_LAYER_LOWER:
+  case SP_TRI_LAYER_UPPER:
+    if (TRI_LAYER_ADJUST < NUM_LAYERS) {
+      layout_layer_off(keycode == SP_TRI_LAYER_LOWER ? TRI_LAYER_LOWER
+                                                     : TRI_LAYER_UPPER);
+      layout_update_tri_layer();
+    }
     break;
 
   default:

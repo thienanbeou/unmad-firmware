@@ -189,6 +189,20 @@ typedef enum {
   SP_MOUSE_BUTTON_4 = 0x9E,
   SP_MOUSE_BUTTON_5 = 0x9F,
 
+  // This fork (v1.2): QMK layer keys. TO(n) leaves only layer n on, DF(n)
+  // makes layer n the default layer (until a restart), OSL(n) turns layer n on
+  // for the next key, OSM(m) holds a modifier for the next key (m in HID
+  // order: LCtrl, LShift, LAlt, LGUI, RCtrl, RShift, RAlt, RGUI). Held down
+  // with another key, OSL and OSM act like MO and the plain modifier.
+  SP_TO_MIN = 0xA0,
+  SP_TO_MAX = 0xA7,
+  SP_DF_MIN = 0xA8,
+  SP_DF_MAX = 0xAF,
+  SP_OSL_MIN = 0xB0,
+  SP_OSL_MAX = 0xB7,
+  SP_OSM_MIN = 0xB8,
+  SP_OSM_MAX = 0xBF,
+
   // Layer keycodes
   SP_MO_MIN = 0xC0,
   SP_MO_MAX = 0xC7,
@@ -214,6 +228,10 @@ typedef enum {
   SP_GRAVE_ESCAPE = 0xF3,
   SP_REPEAT_KEY = 0xF4,
   SP_MAC_MODE = 0xF5,
+  // QMK Tri Layer (v1.2): Lower and Upper act as MO(1) and MO(2), both held
+  // turn on layer 3
+  SP_TRI_LAYER_LOWER = 0xF6,
+  SP_TRI_LAYER_UPPER = 0xF7,
 
   XXXXXXX = KC_NO,
   _______ = KC_TRANSPARENT,
@@ -337,6 +355,14 @@ extern const uint16_t keycode_to_hid[];
 #define PF(profile) (SP_PF_MIN | (profile))
 #define PF_GET_PROFILE(kc) ((kc) & 0x07)
 
+#define TO(layer) (SP_TO_MIN | (layer))
+#define DF(layer) (SP_DF_MIN | (layer))
+#define OSL(layer) (SP_OSL_MIN | (layer))
+#define OSM(mod) (SP_OSM_MIN | (mod))
+#define LAYER_KEY_GET_LAYER(kc) ((kc) & 0x07)
+// The modifier keycode of an OSM key
+#define OSM_GET_MODIFIER(kc) (KC_LEFT_CTRL + ((kc) & 0x07))
+
 #define IS_KEYBOARD_KEYCODE(kc) (KC_A <= (kc) && (kc) <= KC_LANGUAGE_5)
 #define IS_MODIFIER_KEYCODE(kc) (KC_LEFT_CTRL <= (kc) && (kc) <= KC_RIGHT_GUI)
 #define IS_SYSTEM_KEYCODE(kc)                                                  \
@@ -357,3 +383,7 @@ extern const uint16_t keycode_to_hid[];
 #define HID_KEYCODE_RANGE KC_A... SP_MOUSE_BUTTON_5
 #define MOMENTARY_LAYER_RANGE SP_MO_MIN... SP_MO_MAX
 #define PROFILE_RANGE SP_PF_MIN... SP_PF_MAX
+#define TO_LAYER_RANGE SP_TO_MIN... SP_TO_MAX
+#define DEFAULT_LAYER_RANGE SP_DF_MIN... SP_DF_MAX
+#define ONE_SHOT_LAYER_RANGE SP_OSL_MIN... SP_OSL_MAX
+#define ONE_SHOT_MOD_RANGE SP_OSM_MIN... SP_OSM_MAX

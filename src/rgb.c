@@ -21,6 +21,8 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "hid.h"
+#include "keycodes.h"
+#include "layout.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
 
@@ -99,9 +101,25 @@ static uint8_t qadd8(uint8_t i, uint8_t j) {
 static uint8_t qsub8(uint8_t i, uint8_t j) { return i > j ? i - j : 0; }
 
 // Every LED write goes through the white balance (255 = unchanged)
-static void led_set(uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
+static void led_write(uint8_t led, rgb_t c) {
   const uint8_t *wb = eeconfig->rgb.white_balance;
-  rgb_driver_set(led, scale8(r, wb[0]), scale8(g, wb[1]), scale8(b, wb[2]));
+  rgb_driver_set(led, scale8(c.r, wb[0]), scale8(c.g, wb[1]),
+                 scale8(c.b, wb[2]));
+}
+
+// Indicators (Caps Lock, layer) draw over the effect without touching it:
+// `frame` keeps the effect's own colours, and the LEDs an indicator covers
+// only update there, so lifting the indicator puts the effect back as it is
+// (some effects repaint only a few LEDs per frame).
+static rgb_t frame[RGB_NUM_LEDS];
+static bitmap_t covered[] = MAKE_BITMAP(RGB_NUM_LEDS);
+
+static void led_set(uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
+  if (led >= RGB_NUM_LEDS)
+    return;
+  frame[led] = (rgb_t){r, g, b};
+  if (!bitmap_get(covered, led))
+    led_write(led, frame[led]);
 }
 
 static uint8_t abs8(int8_t i) { return i < 0 ? -i : i; }
@@ -1090,27 +1108,56 @@ void rgb_task(void) {
   last_frame = now;
   rgb_timer = now;
 
-  bool init = eeconfig->rgb.effect != last_effect;
+  const bool init = eeconfig->rgb.effect != last_effect;
   last_effect = eeconfig->rgb.effect;
-#if defined(RGB_CAPS_LOCK_KEY)
-  // Caps Lock indicator: drawn over the effect. When it goes off, redraw the
-  // whole effect, since some effects only touch a few LEDs per frame.
-  static bool caps_shown = false;
-  const bool caps = !eeconfig->options.caps_indicator_disabled &&
-                    (hid_get_led_state() & 0x02);
-  init |= caps_shown & !caps;
-  caps_shown = caps;
-#endif
-  rgb_render(init);
-#if defined(RGB_CAPS_LOCK_KEY)
-  if (caps) {
-    // Its own colour and brightness, also with the lighting off
-    const eeconfig_rgb_t *cfg = &eeconfig->rgb;
+
+  // Indicators of this frame, each in its own colour and brightness (also
+  // with the lighting off). Layer: while a layer other than 0 is on, its keys
+  // that do something (not transparent, not "no key", or an advanced key).
+  const eeconfig_rgb_t *cfg = &eeconfig->rgb;
+  static rgb_t shown[RGB_NUM_LEDS];
+  bitmap_t cover[M_DIV_CEIL(RGB_NUM_LEDS, 32)] = {0};
+  const uint8_t layer = layout_current_layer();
+  if (!eeconfig->options.layer_indicator_disabled && layer != 0) {
     const rgb_t c = hsv_to_rgb((hsv_t){
+        cfg->layer_hue, cfg->layer_sat,
+        M_MIN(cfg->layer_val, RGB_MAX_BRIGHTNESS)});
+    for (uint8_t k = 0; k < NUM_KEYS; k++) {
+      const uint8_t kc = CURRENT_PROFILE.keymap[layer][k];
+      if (kc != KC_TRANSPARENT && kc != KC_NO && key_leds[k] != RGB_NO_LED) {
+        bitmap_set(cover, key_leds[k], true);
+        shown[key_leds[k]] = c;
+      }
+    }
+    for (uint8_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+      const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
+      if (ak->type == AK_TYPE_NONE || ak->layer != layer ||
+          ak->key >= NUM_KEYS || key_leds[ak->key] == RGB_NO_LED)
+        continue;
+      bitmap_set(cover, key_leds[ak->key], true);
+      shown[key_leds[ak->key]] = c;
+    }
+  }
+#if defined(RGB_CAPS_LOCK_KEY)
+  if (!eeconfig->options.caps_indicator_disabled &&
+      (hid_get_led_state() & 0x02)) {
+    bitmap_set(cover, key_leds[RGB_CAPS_LOCK_KEY], true);
+    shown[key_leds[RGB_CAPS_LOCK_KEY]] = hsv_to_rgb((hsv_t){
         cfg->caps_hue, cfg->caps_sat, M_MIN(cfg->caps_val, RGB_MAX_BRIGHTNESS)});
-    led_set(key_leds[RGB_CAPS_LOCK_KEY], c.r, c.g, c.b);
   }
 #endif
+
+  // LEDs no longer covered get the effect back, then the effect renders
+  // (covered LEDs only into `frame`), then the indicators go on top
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
+    if (bitmap_get(covered, i) && !bitmap_get(cover, i))
+      led_write(i, frame[i]);
+    bitmap_set(covered, i, bitmap_get(cover, i));
+  }
+  rgb_render(init);
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+    if (bitmap_get(covered, i))
+      led_write(i, shown[i]);
 }
 
 //--------------------------------------------------------------------+
@@ -1185,6 +1232,17 @@ bool rgb_command(const uint8_t *in, uint8_t *out) {
   case COMMAND_SET_RGB_WHITE_BALANCE:
     // R, G, B gain
     return EECONFIG_WRITE_N(rgb.white_balance, &in[1], 3);
+  case COMMAND_GET_RGB_LAYER:
+    // Layer indicator hue, sat, val
+    out[1] = eeconfig->rgb.layer_hue;
+    out[2] = eeconfig->rgb.layer_sat;
+    out[3] = eeconfig->rgb.layer_val;
+    return true;
+  case COMMAND_SET_RGB_LAYER: {
+    // hue, sat, val (capped at the maximum brightness)
+    const uint8_t layer[3] = {in[1], in[2], M_MIN(in[3], RGB_MAX_BRIGHTNESS)};
+    return EECONFIG_WRITE_N(rgb.layer_hue, layer, sizeof(layer));
+  }
   default:
     return false;
   }

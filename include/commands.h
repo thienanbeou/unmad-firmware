@@ -75,6 +75,9 @@ typedef enum {
   // Lighting: the white balance (src/rgb.c)
   COMMAND_GET_RGB_WHITE_BALANCE,
   COMMAND_SET_RGB_WHITE_BALANCE,
+  // Lighting: the layer indicator colour (src/rgb.c)
+  COMMAND_GET_RGB_LAYER,
+  COMMAND_SET_RGB_LAYER,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;

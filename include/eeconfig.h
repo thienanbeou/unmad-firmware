@@ -62,8 +62,11 @@ typedef union __attribute__((packed)) {
     // older configurations, whose reserved bits are 0, get it without a
     // migration)
     bool caps_indicator_disabled : 1;
+    // Layer indicator on the RGB off (v1.2 of this fork, stored inverted like
+    // the Caps Lock one)
+    bool layer_indicator_disabled : 1;
     // Reserved bits for future use
-    uint16_t reserved : 8;
+    uint16_t reserved : 7;
   };
   uint16_t raw;
 } eeconfig_options_t;
@@ -155,6 +158,11 @@ typedef struct __attribute__((packed)) {
   // White balance (added in v1.9): R, G, B gain applied to every LED, 255 =
   // unchanged. The LEDs are not colour balanced (white can look blue-green).
   uint8_t white_balance[3];
+  // Layer indicator colour in QMK HSV (added in v1.10): while a layer other
+  // than 0 is on, its keys that do something light in it
+  uint8_t layer_hue;
+  uint8_t layer_sat;
+  uint8_t layer_val;
 } eeconfig_rgb_t;
 #endif
 
@@ -172,7 +180,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0109
+#define EECONFIG_VERSION 0x010A
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -198,7 +206,8 @@ typedef struct __attribute__((packed)) {
   uint8_t last_non_default_profile;
 #if defined(RGB_NUM_LEDS)
   // Lighting configuration (added in v1.6 of this fork, hue_range in v1.7,
-  // the Caps Lock colour in v1.8, the white balance in v1.9)
+  // the Caps Lock colour in v1.8, the white balance in v1.9, the layer
+  // indicator colour in v1.10)
   eeconfig_rgb_t rgb;
 #endif
   // End of global configurations
@@ -253,6 +262,9 @@ extern const eeconfig_t *eeconfig;
       .caps_sat = 0,                                                           \
       .caps_val = RGB_DEFAULT_VAL,                                             \
       .white_balance = {255, 255, 255},                                        \
+      .layer_hue = 170,                                                        \
+      .layer_sat = 255,                                                        \
+      .layer_val = RGB_DEFAULT_VAL,                                            \
   }
 #endif
 

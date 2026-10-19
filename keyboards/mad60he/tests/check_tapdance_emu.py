@@ -52,8 +52,17 @@ FIXTURE = [   # (type, layer, key, ...)
     ("tap_dance", 1, TD2_N, "HOME", None, "PAGE_UP", None),
     ("null_bind", 0, A, D),
 ]
+# Layer keys (v1.2) on layer 0 G H J K L ; (Q-U are the 7-key rollover test);
+# ' is a probe that types F14 / F15 / F16 on layers 1 / 2 / 3; on layer 3, J
+# and K lead back (TO(0), DF(0))
+OSM_R, OSL_T, TO_Y, DF_U, TL_LOWER_I, TL_UPPER_O, PROBE_P = 33, 34, 35, 36, 37, 38, 39
+OSM_LSHIFT, OSL_3, TO_3, DF_3, TO_0, DF_0 = 0xB9, 0xB3, 0xA3, 0xAB, 0xA0, 0xA8
 KEYMAP = [(1, RBRC_S, "RIGHT_BRACKET"), (1, GESC_C, "SP_GRAVE_ESCAPE"),
-          (1, REPEAT_V, "SP_REPEAT_KEY"), (1, LLOCK_B, "SP_LAYER_LOCK")]   # (layer, key, keycode)
+          (1, REPEAT_V, "SP_REPEAT_KEY"), (1, LLOCK_B, "SP_LAYER_LOCK"),
+          (0, OSM_R, OSM_LSHIFT), (0, OSL_T, OSL_3), (0, TO_Y, TO_3), (0, DF_U, DF_3),
+          (0, TL_LOWER_I, "SP_TRI_LAYER_LOWER"), (0, TL_UPPER_O, "SP_TRI_LAYER_UPPER"),
+          (1, PROBE_P, "F14"), (2, PROBE_P, "F15"), (3, PROBE_P, "F16"),
+          (3, TO_Y, TO_0), (3, DF_U, DF_0)]   # (layer, key, keycode name or value)
 SET_KEYMAP, SET_ADVANCED_KEYS, SET_MACROS = 129, 133, 141
 ACTION = {"press": 1, "tap": 2, "release": 3}
 MACRO_NONE, AK_TAP_DANCE, AK_MACRO, AK_NULL_BIND, NB_DISTANCE = 0xFF, 6, 5, 1, 4
@@ -111,7 +120,7 @@ for i, node in enumerate(nodes):
 for i, ak in enumerate(aks):
     command(SET_ADVANCED_KEYS, 0, *struct.pack("<H", i * AK_SIZE), AK_SIZE, *ak)
 for layer, key, kc in KEYMAP:
-    command(SET_KEYMAP, 0, layer, key, 1, KC[kc])
+    command(SET_KEYMAP, 0, layer, key, 1, KC[kc] if isinstance(kc, str) else kc)
 
 now = [0]
 events: list[tuple[int, str, str]] = []
@@ -383,12 +392,49 @@ plain_s = report({KEY_S: [(100, 140)]}, [120], fn=False)
 check("20 TG via Layer Lock: layer 1 stays on after Fn is released, off after the next lock", [],
       keys_in(ll[0]) == {HID_RBRC} and keys_in(ll[1]) == {HID_S} and keys_in(plain_s[0]) == {HID_S})
 
+# Layer keys (v1.2). ' types F14 / F15 / F16 on layers 1 / 2 / 3, ' on 0.
+def probes(ev):
+    return [n for _, s, n in ev if s == "+" and n in ("QUOTE", "F14", "F15", "F16")]
+
+
+# One Shot Shift (G): tapped, Shift waits for the next key and goes with its
+# release; held while 1 is pressed, it is a plain Shift; then nothing is armed
+HID_SHIFT = 0x02
+tap = report({OSM_R: [(20, 40)], KEY_1: [(80, 120)]}, [60, 100, 140], fn=False)
+held = report({OSM_R: [(20, 120)], KEY_1: [(50, 80)], PROBE_P: [(150, 170)]}, [60, 140, 160], fn=False)
+check("22 One Shot Shift: tap arms it for the next key, released with it; held = plain Shift", [],
+      tap[0][0] == HID_SHIFT and tap[1][0] == HID_SHIFT and keys_in(tap[1]) == {HID_1}
+      and tap[2][0] == 0 and keys_in(tap[2]) == set()
+      and held[0][0] == HID_SHIFT and keys_in(held[0]) == {HID_1} and held[1][0] == 0
+      and held[2][0] == 0)
+
+# One Shot layer 3 (H): tapped, only the next key uses layer 3; held, every
+# key pressed meanwhile does, and the layer goes with the key
+osl_tap = play({OSL_T: [(20, 40)], PROBE_P: [(80, 100), (130, 150)]}, 200, fn=False)
+osl_held = play({OSL_T: [(20, 150)], PROBE_P: [(50, 70), (100, 120), (170, 190)]}, 230, fn=False)
+check("23 One Shot layer: tap -> next key on layer 3 only; held -> like MO(3)", osl_tap + osl_held,
+      probes(osl_tap) == ["F16", "QUOTE"] and probes(osl_held) == ["F16", "F16", "QUOTE"])
+
+# TO(3) (J) stays on layer 3 until TO(0) (layer 3's J); DF(3) (K) makes layer
+# 3 the default until DF(0)
+to = play({TO_Y: [(20, 40), (140, 160)], PROBE_P: [(60, 80), (100, 120), (180, 200)]}, 240, fn=False)
+df = play({DF_U: [(20, 40), (140, 160)], PROBE_P: [(60, 80), (100, 120), (180, 200)]}, 240, fn=False)
+check("24 TO / DF: layer 3 stays until TO(0) / DF(0)", to + df,
+      probes(to) == ["F16", "F16", "QUOTE"] and probes(df) == ["F16", "F16", "QUOTE"])
+
+# Tri Layer: Lower (L) = layer 1, Upper (;) = layer 2, both = layer 3
+tri = play({TL_LOWER_I: [(20, 200)], TL_UPPER_O: [(60, 140), (230, 280)],
+            PROBE_P: [(30, 50), (90, 110), (160, 180), (240, 260), (300, 320)]}, 340, fn=False)
+check("25 Tri Layer: Lower -> 1, Lower + Upper -> 3, Upper -> 2, none -> 0", tri,
+      probes(tri) == ["F14", "F16", "F14", "F15", "QUOTE"])
+
 # Raw HID hands every lighting command to rgb_command (commands.c lists them
 # one by one; white balance once answered "unknown" on the board for that)
-for c in (0xE0, 0xE2, 0xE7, 0xE9):
+for c in (0xE0, 0xE2, 0xE7, 0xE9, 0xEB):
     command(c)
 command(0xEA, 255, 255, 255)
-check("21 raw HID routes the lighting commands (GET_RGB, key colours, Caps, white balance)", [], True)
+command(0xEC, 170, 255, 210)
+check("21 raw HID routes the lighting commands (GET_RGB, key colours, Caps, white balance, layer colour)", [], True)
 
 print("all ok" if ok else "FAILED")
 sys.exit(0 if ok else 1)
