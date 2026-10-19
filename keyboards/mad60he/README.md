@@ -158,7 +158,9 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   the stock list), a colour range for the rainbow effects, per-key colours),
   set at runtime with raw HID commands 0xE0-0xE3. From v1.1 the Caps Lock key
   lights while Caps Lock is on, in its own colour and brightness (white 210 by
-  default, commands 0xE7 / 0xE8; option bit 7 turns it off). Defaults in
+  default, commands 0xE7 / 0xE8; option bit 7 turns it off). From v1.2 the
+  speed sets how fast Typing Heatmap fades (127 = QMK's fixed rate, lower
+  fades slower). Defaults in
   `config.h`: Rainbow Pinwheels (the stock "Colorful Swirls 2"), brightness
   210 (the stock maximum; the ceiling is 255).
 - Stock switches: WASD swap, Win lock, 6KRO (option bits 3-5, keys

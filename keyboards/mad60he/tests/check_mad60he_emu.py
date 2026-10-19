@@ -365,6 +365,28 @@ if "rgb_slots" in syms:
             led = key_leds[KEY_A]
             assert got[led] != (0, 0, 0), f"{name}: pressed key's LED dark"
             lit.append(sum(1 for c in got if c != (0, 0, 0)))
+        if name == "TYPING_HEATMAP":
+            # The speed sets the cooling: one press (heat 64) is gone after
+            # 1 s at speed 255 (12 ms steps), still lit at speed 32 (96 ms)
+            after = {}
+            for sp in (255, 32):
+                command(0xE1, 0, 85, 255, 210, sp, 255)      # Off, then back: clears the heat
+                tick += 40
+                frame(tick)
+                command(0xE1, effect, 85, 255, 210, sp, 255)
+                tick += 40
+                frame(tick)
+                b.uc.mem_write(syms["key_matrix"] + KEY_A * 10 + IS_PRESSED, b"\x01")
+                tick += 40
+                frame(tick)
+                b.uc.mem_write(syms["key_matrix"] + KEY_A * 10 + IS_PRESSED, b"\x00")
+                pressed = max(leds()[key_leds[KEY_A]])
+                for _ in range(25):
+                    tick += 40
+                    frame(tick)
+                after[sp] = max(leds()[key_leds[KEY_A]])
+                assert pressed > 0, f"heatmap speed {sp}: pressed key dark"
+            assert after[255] == 0 and 0 < after[32] < pressed, f"heatmap fade by speed {after}"
         summary.append(f"{name.lower()} {lit[-1]}")
     print(f"11 effects: all {NUM_EFFECTS} render and return; LEDs lit per effect: " + ", ".join(summary))
 

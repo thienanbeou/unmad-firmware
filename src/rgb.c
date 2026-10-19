@@ -823,9 +823,10 @@ static void effect_flower_blooming(void) {
 }
 
 // QMK TYPING_HEATMAP with its default settings, kept per LED instead of per
-// matrix position (one LED per key on this board)
+// matrix position (one LED per key on this board). The speed sets how fast
+// keys cool down instead (QMK's fixed 25 ms per step = speed 127).
 #define HEATMAP_INCREASE_STEP 32
-#define HEATMAP_DECREASE_DELAY_MS 25
+#define HEATMAP_DECREASE_DELAY_MS (3200u / (speed + 1u))
 #define HEATMAP_SPREAD 40
 #define HEATMAP_AREA_LIMIT 16
 
@@ -855,11 +856,11 @@ static void effect_typing_heatmap(bool init) {
     memset(heat, 0, sizeof(heat));
     decrease_timer = rgb_timer;
   }
-  // QMK cools every key by 1 every 25 ms; frames here are 20 ms apart, so
-  // count the 25 ms steps that passed
-  const uint32_t steps =
-      (rgb_timer - decrease_timer) / HEATMAP_DECREASE_DELAY_MS;
-  decrease_timer += steps * HEATMAP_DECREASE_DELAY_MS;
+  // Every key cools by 1 per step (12 ms at speed 255, 25 ms at 127, 3.2 s
+  // at 0); frames here are 20 ms apart, so count the steps that passed
+  const uint32_t delay = HEATMAP_DECREASE_DELAY_MS;
+  const uint32_t steps = (rgb_timer - decrease_timer) / delay;
+  decrease_timer += steps * delay;
   for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
     const uint8_t val = heat[i];
     set_hsv(i, (hsv_t){(uint8_t)(170 - qsub8(val, 85)), base.s,
