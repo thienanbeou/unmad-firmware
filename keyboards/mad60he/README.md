@@ -16,7 +16,7 @@ but going back to the stock firmware is one command (below).
 
 You need: the keyboard plugged in by USB, Python 3, and the
 [release files](https://github.com/thienanbeou/unmad-firmware/releases)
-`unmad-firmware-mad60he-v1.1.bin` and `fwtool.py` in one folder.
+`unmad-firmware-mad60he-v1.2.bin` and `fwtool.py` in one folder.
 
 1. Install the HID library once: `pip install hidapi`.
    Linux only: allow access without root, then replug:
@@ -28,7 +28,7 @@ You need: the keyboard plugged in by USB, Python 3, and the
 2. Close the vendor's web app or driver if it is open.
 3. Flash (about 10 seconds; keep the cable in):
 
-       python fwtool.py flash unmad-firmware-mad60he-v1.1.bin --yes --keep-settings
+       python fwtool.py flash unmad-firmware-mad60he-v1.2.bin --yes --keep-settings
 
    `--keep-settings` leaves your stock settings untouched in flash, so they
    are still there if you go back.
@@ -38,13 +38,16 @@ You need: the keyboard plugged in by USB, Python 3, and the
 5. Configure it in the browser (Chrome, Edge or Brave):
    https://thienanbeou.github.io/unmad-configurator/. Keymap, per-key
    actuation and Rapid Trigger, tap dance and other advanced keys, macros,
-   lighting, WASD swap / Win lock / 6KRO, and from v1.1 Mac mode and the
-   Caps Lock indicator (its colour and brightness in the Lighting tab).
+   lighting, WASD swap / Win lock / 6KRO, from v1.1 Mac mode and the
+   Caps Lock indicator (its colour and brightness in the Lighting tab), and
+   from v1.2 the layer keys (Layers section of the key list), the layer
+   indicator and Color Calibration (Lighting tab).
 
-Upgrading from v1.0 is the same flash command. Your settings are kept and
-upgraded on the first start, nothing is reset. Your saved keymap stays as it
-is, so Fn + M only becomes Mac mode if you bind it (Special keycodes: Mac
-Mode) or use the switch in Settings. Reload the configurator page afterwards.
+Upgrading from v1.0 or v1.1 is the same flash command. Your settings are
+kept and upgraded on the first start, nothing is reset. Your saved keymap
+stays as it is: coming from v1.0, Fn + M only becomes Mac mode if you bind
+it (Special keycodes: Mac Mode) or use the switch in Settings. Reload the
+configurator page afterwards.
 
 If the keyboard ever stops responding (firmware v1.1+): unplug it, hold
 **Esc**, plug it in and let go. It starts in the bootloader, ready for
