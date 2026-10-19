@@ -1058,6 +1058,7 @@ void rgb_task(void) {
   static bool started = false;
   static uint32_t last_frame = 0;
   static uint8_t last_effect = 0xFF;
+  static uint32_t last_hit_scan = 0;
   static bitmap_t pressed[] = MAKE_BITMAP(NUM_KEYS);
 
   if (!started) {
@@ -1065,18 +1066,23 @@ void rgb_task(void) {
     started = true;
   }
 
-  // Key presses feed the reactive effects and the typing heatmap
-  for (uint8_t k = 0; k < NUM_KEYS; k++) {
-    const bool is_pressed = key_matrix[k].is_pressed;
-    if (is_pressed && !bitmap_get(pressed, k) && key_leds[k] != RGB_NO_LED) {
-      rgb_add_hit(key_leds[k]);
-      if (eeconfig->rgb.effect == RGB_EFFECT_TYPING_HEATMAP)
-        heatmap_hit(key_leds[k]);
+  // Key presses feed the reactive effects and the typing heatmap. Looked at
+  // once per millisecond (no press is shorter), not on every main loop pass,
+  // where the 61 keys cost about 15% of the loop.
+  const uint32_t now = timer_read();
+  if (now != last_hit_scan) {
+    last_hit_scan = now;
+    for (uint8_t k = 0; k < NUM_KEYS; k++) {
+      const bool is_pressed = key_matrix[k].is_pressed;
+      if (is_pressed && !bitmap_get(pressed, k) && key_leds[k] != RGB_NO_LED) {
+        rgb_add_hit(key_leds[k]);
+        if (eeconfig->rgb.effect == RGB_EFFECT_TYPING_HEATMAP)
+          heatmap_hit(key_leds[k]);
+      }
+      bitmap_set(pressed, k, is_pressed);
     }
-    bitmap_set(pressed, k, is_pressed);
   }
 
-  const uint32_t now = timer_read();
   if (now - last_frame < RGB_FRAME_MS)
     return;
   rgb_age_hits(now - last_frame);

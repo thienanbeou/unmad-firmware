@@ -35,6 +35,9 @@ static TIM_HandleTypeDef rgb_tim;
 static DMA_HandleTypeDef rgb_dma;
 // Read continuously by the DMA; LEDs are written in place
 static uint16_t rgb_slots[RGB_NUM_SLOTS];
+// Colour last written per LED (GRB), to skip unchanged LEDs: static effects
+// then cost almost nothing per frame. All LEDs start off, as the slots do.
+static uint32_t rgb_last[RGB_NUM_LEDS];
 
 void rgb_driver_init(void) {
   GPIO_InitTypeDef gpio_init = {0};
@@ -98,6 +101,9 @@ void rgb_driver_set(uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
 
   // WS2812 order: green, red, blue, most significant bit first
   const uint32_t grb = ((uint32_t)g << 16) | ((uint32_t)r << 8) | b;
+  if (grb == rgb_last[led])
+    return;
+  rgb_last[led] = grb;
   uint16_t *slot = &rgb_slots[led * 24];
   for (uint32_t i = 0; i < 24; i++)
     slot[i] = (grb >> (23 - i)) & 1 ? RGB_BIT_1 : RGB_BIT_0;
