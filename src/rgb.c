@@ -1083,6 +1083,7 @@ void rgb_task(void) {
     }
   }
 
+  rgb_driver_flush();
   if (now - last_frame < RGB_FRAME_MS)
     return;
   rgb_age_hits(now - last_frame);

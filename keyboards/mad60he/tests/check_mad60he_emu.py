@@ -183,7 +183,8 @@ if "rgb_slots" in syms:
     assert sh.get(0x40000420, 0) & (1 << 12) and sh.get(0x4000040C, 0) & (1 << 12), "CC4E / CC4DE"
     assert sh.get(0x40000400, 0) & 1, "TIM3 not running"
     cr = sh.get(0x40026040, 0)
-    assert (cr >> 25) & 7 == 5 and cr & (1 << 8) and (cr >> 6) & 3 == 1 and cr & 1, f"DMA1 S2 CR {cr:#x}"
+    # Channel 5, memory to peripheral, enabled; one shot per frame (not circular)
+    assert (cr >> 25) & 7 == 5 and not cr & (1 << 8) and (cr >> 6) & 3 == 1 and cr & 1, f"DMA1 S2 CR {cr:#x}"
     assert sh.get(0x40026044) == 61 * 24 + 224 and sh.get(0x40026048) == 0x40000440, "DMA NDTR / PAR"
     assert sh.get(0x4002604C) == syms["rgb_slots"], "DMA M0AR"
     assert (sh.get(0x40020800, 0) >> 18) & 3 == 2 and (sh.get(0x40020824, 0) >> 4) & 0xF == 2, "PC9 AF2"
@@ -285,6 +286,28 @@ if "rgb_slots" in syms:
     for k, led in enumerate(key_leds):
         want[led] = tuple((c * 256) >> 8 for c in colors[k])  # scale8(c, 255)
     assert got == want, f"per-key colours: {bad(got, want)}"
+    # One-shot transfers: once the stream is done (enable bit cleared, as the
+    # hardware does; the emulator never clears it), a pending frame goes out,
+    # an unchanged one is not sent again, a changed one is (all slots). A frame
+    # rendered in one pass is sent at the start of the next.
+    S2CR, S2NDTR = 0x40026040, 0x40026044
+
+    def finish_transfer():
+        b.shadow[S2CR] &= ~1
+        b.shadow[S2NDTR] = 0
+    finish_transfer()
+    frame(TICK + 100)                                       # sends what was pending
+    pending_sent = b.shadow[S2CR] & 1
+    finish_transfer()
+    frame(TICK + 101)                                       # nothing changed
+    idle_kept = not b.shadow[S2CR] & 1
+    ok, _ = command(0xE3, 0, 1, 1, 2, 3)                    # key 0 gets a new colour
+    frame(TICK + 120)
+    frame(TICK + 121)
+    resent = b.shadow[S2CR] & 1 and b.shadow[S2NDTR] == 61 * 24 + 224
+    assert pending_sent and idle_kept and resent,         f"one-shot LED transfer: pending sent {pending_sent}, idle kept {idle_kept}, resent {resent}"
+    ok, _ = command(0xE3, 0, 1, *colors[0])
+    frame(TICK + 140)
     # White balance (v1.9): each channel of every LED scaled, 255 = unchanged
     ok, out = command(0xE9)
     wb_note = "no white balance in this build"
@@ -303,9 +326,9 @@ if "rgb_slots" in syms:
         frame(TICK + 160)
         assert leds()[key_leds[0]] == colors[0], "white balance back to 255"
         wb_note = "white balance scales every LED and reads back"
-    print("10 RGB: TIM3/DMA1/PC9 as stock; default Rainbow Pinwheels matches the "
+    print("10 RGB: TIM3/DMA1/PC9 timing as stock; default Rainbow Pinwheels matches the "
           "reference; colour range 0 / 60 / 254 match the reference; GET/SET_RGB, range check, solid colour, per-key colours and "
-          f"the custom effect all verified; {wb_note}")
+          f"the custom effect all verified; LED data sent once per change (none when unchanged); {wb_note}")
 
     # 11. Every effect renders frames without faulting (each frame returns to
     # the caller, watchdog refreshed), and the reactive effects answer a key

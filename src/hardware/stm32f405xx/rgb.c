@@ -20,11 +20,15 @@
 
 #if defined(RGB_NUM_LEDS)
 
-// WS2812 chain on PC9 = TIM3_CH4 (AF2), fed by DMA1 stream 2 channel 5 in
-// circular mode, the same as the stock MAD60 HE firmware: 84 MHz timer, 12.5 us
-// per bit, high for 0.35 us ("0") or 0.80 us ("1"). WS2812 decodes the high
-// time, so the long low part only slows the frame down (~21 ms). The trailing
-// zero slots hold the line low between frames (reset).
+// WS2812 chain on PC9 = TIM3_CH4 (AF2), fed by DMA1 stream 2 channel 5: 84 MHz
+// timer, 12.5 us per bit as in the stock MAD60 HE firmware, high for 0.35 us
+// ("0") or 0.80 us ("1"). WS2812 decodes the high time, so the long low part
+// only slows the frame down (~21 ms). The trailing zero slots hold the line
+// low after a frame (reset). The standard 1.25 us bit was tried: a frame then
+// takes 2 ms, but moving effects disturb PA7 just as much (same pulses). Unlike stock, a frame goes out once, only when an
+// LED changed (rgb_driver_flush): the LEDs keep their colour, and a busy data
+// line couples into the bottom row's sensor line (PA7, rest noise 2.6 -> 0.2
+// counts with the line idle, measured 2026-10-19).
 #define RGB_BIT_PERIOD 1050
 #define RGB_BIT_0 29
 #define RGB_BIT_1 67
@@ -33,8 +37,10 @@
 
 static TIM_HandleTypeDef rgb_tim;
 static DMA_HandleTypeDef rgb_dma;
-// Read continuously by the DMA; LEDs are written in place
+// Read by the DMA; LEDs are written in place
 static uint16_t rgb_slots[RGB_NUM_SLOTS];
+// Some LED changed since the last transfer started
+static bool rgb_dirty = false;
 // Colour last written per LED (GRB), to skip unchanged LEDs: static effects
 // then cost almost nothing per frame. All LEDs start off, as the slots do.
 static uint32_t rgb_last[RGB_NUM_LEDS];
@@ -81,15 +87,15 @@ void rgb_driver_init(void) {
   rgb_dma.Init.MemInc = DMA_MINC_ENABLE;
   rgb_dma.Init.PeriphDataAlignment = DMA_PDATAALIGN_HALFWORD;
   rgb_dma.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
-  rgb_dma.Init.Mode = DMA_CIRCULAR;
+  rgb_dma.Init.Mode = DMA_NORMAL;
   rgb_dma.Init.Priority = DMA_PRIORITY_LOW;
   rgb_dma.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
   if (HAL_DMA_Init(&rgb_dma) != HAL_OK)
     board_error_handler();
   __HAL_LINKDMA(&rgb_tim, hdma[TIM_DMA_ID_CC4], rgb_dma);
 
-  // No DMA interrupt is enabled in the NVIC: the circular transfer runs on its
-  // own and nothing waits for it
+  // No DMA interrupt is enabled in the NVIC: rgb_driver_flush sees the end of
+  // a transfer by the stream's enable bit, which the hardware clears
   if (HAL_TIM_PWM_Start_DMA(&rgb_tim, TIM_CHANNEL_4, (uint32_t *)rgb_slots,
                             RGB_NUM_SLOTS) != HAL_OK)
     board_error_handler();
@@ -107,6 +113,17 @@ void rgb_driver_set(uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
   uint16_t *slot = &rgb_slots[led * 24];
   for (uint32_t i = 0; i < 24; i++)
     slot[i] = (grb >> (23 - i)) & 1 ? RGB_BIT_1 : RGB_BIT_0;
+  rgb_dirty = true;
+}
+
+void rgb_driver_flush(void) {
+  if (!rgb_dirty || (rgb_dma.Instance->CR & DMA_SxCR_EN))
+    return;
+  rgb_dirty = false;
+  DMA1->LIFCR = DMA_LIFCR_CTCIF2 | DMA_LIFCR_CHTIF2 | DMA_LIFCR_CTEIF2 |
+                DMA_LIFCR_CDMEIF2 | DMA_LIFCR_CFEIF2;
+  rgb_dma.Instance->NDTR = RGB_NUM_SLOTS;
+  rgb_dma.Instance->CR |= DMA_SxCR_EN;
 }
 
 #endif

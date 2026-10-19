@@ -60,7 +60,7 @@ bool rgb_command(const uint8_t *in, uint8_t *out);
 void rgb_driver_init(void);
 
 /**
- * @brief Set one LED. It shows from the next frame on the wire.
+ * @brief Set one LED. It shows once rgb_driver_flush sends it.
  *
  * @param led LED index in chain order
  * @param r Red
@@ -70,5 +70,12 @@ void rgb_driver_init(void);
  * @return None
  */
 void rgb_driver_set(uint8_t led, uint8_t r, uint8_t g, uint8_t b);
+
+/**
+ * @brief Send the LEDs once if any changed and the wire is free. Call often.
+ *
+ * @return None
+ */
+void rgb_driver_flush(void);
 
 #endif
