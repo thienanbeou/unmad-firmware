@@ -124,14 +124,31 @@ def flash_packets(image: bytes) -> tuple[list[bytes], list[bytes]]:
 
 # device
 
-def _open(pid: int, usage_page: int, usage: int):
+def _open(pid: int, usage_page: int, usage: int, wait: float = 3.0):
+    """The device, or None if it is not there.
+
+    A device that is there but will not open is retried for `wait` seconds,
+    also while it drops off USB: the bootloader, left idle for minutes, failed
+    its first open and re-enumerated (Windows, 2026-10-19).
+    """
     import hid
-    for d in hid.enumerate(VID, pid):
-        if d["usage_page"] == usage_page and d["usage"] == usage:
-            dev = hid.device()
-            dev.open_path(d["path"])
-            return dev
-    return None
+    seen, deadline = False, time.monotonic() + wait
+    while True:
+        for d in hid.enumerate(VID, pid):
+            if d["usage_page"] == usage_page and d["usage"] == usage:
+                seen = True
+                try:
+                    dev = hid.device()
+                    dev.open_path(d["path"])
+                    return dev
+                except OSError:
+                    break
+        if not seen:
+            return None
+        if time.monotonic() > deadline:
+            raise SystemExit(f"{VID:04x}:{pid:04x} is connected but will not open; close other "
+                             "programs using it (vendor app, configurator tab) and rerun")
+        time.sleep(0.1)
 
 
 def _open_libhmk():
@@ -246,6 +263,41 @@ def selftest() -> None:
     assert sum(p[7] for p in data) == len(image)                 # every byte sent once
     assert sum(p[8] for p in data) == 3                          # one "last" per page
     assert data[38][2:6] == (BASE + PAGE).to_bytes(4, "big") and data[38][6] == 0
+
+    # _open: a device that fails to open, then drops off USB, then opens
+    class FakeHid:
+        def __init__(self, script):
+            self.script, self.n = script, 0     # per enumerate: "gone" / "fail" / "ok"
+
+        def enumerate(self, vid, pid):
+            step = self.script[min(self.n, len(self.script) - 1)]
+            self.n += 1
+            return [] if step == "gone" else [{"usage_page": 0xFF, "usage": 1, "path": step}]
+
+        def device(self):
+            class Dev:
+                def open_path(self, path):
+                    if path == "fail":
+                        raise OSError("open failed")
+            return Dev()
+
+    real = sys.modules.get("hid")
+    try:
+        sys.modules["hid"] = FakeHid(["fail", "gone", "gone", "ok"])
+        assert _open(BOOT_PID, 0xFF, 1) is not None, "no retry"
+        sys.modules["hid"] = FakeHid(["gone"])
+        assert _open(BOOT_PID, 0xFF, 1) is None, "absent device waited for"
+        sys.modules["hid"] = FakeHid(["fail"])
+        try:
+            _open(BOOT_PID, 0xFF, 1, wait=0.2)
+            raise AssertionError("open failure not reported")
+        except SystemExit:
+            pass
+    finally:
+        if real is None:
+            sys.modules.pop("hid", None)
+        else:
+            sys.modules["hid"] = real
     print("selftest ok")
 
 
