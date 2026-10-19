@@ -35,7 +35,7 @@ This repository contains libraries for building a Hall-effect keyboard firmware.
 
 Added in this fork (MAD60 HE, configured with [unmad-configurator](https://thienanbeou.github.io/unmad-configurator/); details in [keyboards/mad60he](keyboards/mad60he/README.md)):
 
-- [x] **RGB Lighting**: All 52 QMK RGB Matrix effects, a colour range for the rainbow effects, per-key colours, and a Caps Lock indicator with its own colour and brightness.
+- [x] **RGB Lighting**: All 52 QMK RGB Matrix effects, a colour range for the rainbow effects, per-key colours, a Caps Lock indicator with its own colour and brightness, and from v1.2 a white balance (colour calibration) that corrects every effect.
 - [x] **Tap Dance**: A different action (each one a macro) for tap, hold, double tap and tap-then-hold.
 - [x] **Stock switches**: WASD swap, Win lock, 6KRO and Mac mode, as settings and as keys.
 - [x] **QMK extras**: Grave Escape, Repeat Key and Bootmagic (Esc held while plugging in starts the bootloader).
@@ -44,6 +44,7 @@ Added in this fork (MAD60 HE, configured with [unmad-configurator](https://thien
 ## Limitations
 
 - **RGB Lighting**: Only on the MAD60 HE (this fork's `src/rgb.c` and its WS2812 driver). Upstream libhmk has no lighting, and the other keyboards here still have none.
+- **8kHz Polling Rate**: Not on the MAD60 HE. Its USB port is wired to the chip's built-in Full Speed PHY, which tops out at 1000 Hz.
 
 ## Getting Started
 
