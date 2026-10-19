@@ -383,5 +383,12 @@ plain_s = report({KEY_S: [(100, 140)]}, [120], fn=False)
 check("20 TG via Layer Lock: layer 1 stays on after Fn is released, off after the next lock", [],
       keys_in(ll[0]) == {HID_RBRC} and keys_in(ll[1]) == {HID_S} and keys_in(plain_s[0]) == {HID_S})
 
+# Raw HID hands every lighting command to rgb_command (commands.c lists them
+# one by one; white balance once answered "unknown" on the board for that)
+for c in (0xE0, 0xE2, 0xE7, 0xE9):
+    command(c)
+command(0xEA, 255, 255, 255)
+check("21 raw HID routes the lighting commands (GET_RGB, key colours, Caps, white balance)", [], True)
+
 print("all ok" if ok else "FAILED")
 sys.exit(0 if ok else 1)

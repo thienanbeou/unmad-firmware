@@ -476,7 +476,9 @@ static void command_process(void) {
   case COMMAND_GET_RGB_KEY_COLORS:
   case COMMAND_SET_RGB_KEY_COLORS:
   case COMMAND_GET_RGB_CAPS:
-  case COMMAND_SET_RGB_CAPS: {
+  case COMMAND_SET_RGB_CAPS:
+  case COMMAND_GET_RGB_WHITE_BALANCE:
+  case COMMAND_SET_RGB_WHITE_BALANCE: {
     success = rgb_command(in_buf, out_buf);
     break;
   }
