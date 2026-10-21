@@ -41,10 +41,15 @@ You need: the keyboard plugged in by USB, Python 3, and the
    lighting, WASD swap / Win lock / 6KRO, from v1.1 Mac mode and the
    Caps Lock indicator (its colour and brightness in the Lighting tab), and
    from v1.2 the layer keys (Layers section of the key list), the layer
-   indicator and Color Calibration (Lighting tab).
+   indicator and Color Calibration (Lighting tab), from v1.3 a layer
+   indicator colour per layer and its modes, from v1.4 up to 8 profiles and
+   8 layers ("+" next to the layer buttons, Add Profile), from v1.5 the RGB
+   keys (Lighting section of the key list), Caps Word and the lighting idle
+   timeout (Settings).
 
-Upgrading from v1.0 or v1.1 is the same flash command. Your settings are
-kept and upgraded on the first start, nothing is reset. Your saved keymap
+Upgrading from any earlier release is the same flash command. Your
+settings are kept and upgraded on the first start, nothing is reset (keep
+the cable in during that start). Your saved keymap
 stays as it is: coming from v1.0, Fn + M only becomes Mac mode if you bind
 it (Special keycodes: Mac Mode) or use the switch in Settings. Reload the
 configurator page afterwards.
@@ -59,7 +64,8 @@ cannot start at all.
 
 The stock layout (read from the official 1.06 firmware), 1.5 mm actuation
 on every key. Blank = transparent (the layer below shows through), `--` =
-no key: stock had its RGB controls there; set lighting in the
+no key: stock had its RGB controls there; from v1.5 you can bind the RGB
+keys (Lighting section of the key list) there, or set lighting in the
 configurator. Win/Mac mode is Fn + M as on stock (firmware v1.1; the v1.0
 release has nothing there, and an upgrade keeps your saved keymap). Generated
 from `keyboard.json`.
@@ -117,6 +123,9 @@ Layer 3 (stock Mac Fn; not reachable by default)
 |       |      |      |                                     |  Left | Down |Right |       |
 `-----------------------------------------------------------------------------------------'
 ```
+
+Layers 4-7 are all transparent. 6 layers (0-5) and 4 profiles are in use
+at first; add more in the configurator (v1.4).
 
 ## Going back to stock
 
@@ -216,8 +225,8 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   applies to the next key; held: like MO / the plain modifier), and Tri
   Layer Lower / Upper (MO(1) / MO(2), both held: layer 3). A layer indicator
   lights the keys that do something on the active layer (any layer but 0)
-  in that layer's colour (from v1.3 one per layer: blue, green, red by
-  default; commands 0xEB / 0xEC; option bit 8 turns it off). From v1.3 it
+  in that layer's colour (from v1.3 one per layer; defaults for layers 1-7:
+  blue, green, red, yellow, cyan, magenta, orange; commands 0xEB / 0xEC; option bit 8 turns it off). From v1.3 it
   has four modes for the other keys (option bits 9-10): keep the effect, go
   dark, light the whole board in the layer colour (QMK's two examples), or
   pass-through (transparent keys light too when the layer below gives them

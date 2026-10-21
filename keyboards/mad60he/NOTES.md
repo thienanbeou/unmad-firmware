@@ -30,7 +30,7 @@ were not checked on hardware.
 | 4 | 0x08010000 | 64 KB | empty |
 | 5-7 | 0x08020000 | 384 KB | firmware (stock or this port); the bootloader erases at most these |
 | 8-10 | 0x08040000 | 384 KB | unused |
-| 11 | 0x080E0000 | 128 KB | this port's settings (libhmk eeconfig) |
+| 11 | 0x080E0000 | 128 KB | this port's settings (libhmk eeconfig, wear-leveled: 16 KB of settings + 64 KB log since v1.4, 8 KB before) |
 
 The two firmwares never touch each other's settings, so flashing one over the
 other and back keeps both (tested both ways).
@@ -113,7 +113,8 @@ firmware that resets before clearing the word lands in the bootloader too.
 This port also does it for Bootmagic Lite: Esc held while plugging in,
 judged on the raw sensor level after the startup calibration.
 This port clears it at boot and uses it for its rescue rules (crash, two
-boots in a row without USB, watchdog). RCC_CSR reset flags are sticky across
+boots in a row without USB (a power-on starts the count over, v1.2.2),
+watchdog). RCC_CSR reset flags are sticky across
 these resets (the stock firmware never clears them).
 
 ### Flash protocol
