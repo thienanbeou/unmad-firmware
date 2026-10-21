@@ -38,7 +38,7 @@ Added in this fork (MAD60 HE, configured with [unmad-configurator](https://thien
 - [x] **RGB Lighting**: All 52 QMK RGB Matrix effects, a colour range for the rainbow effects, per-key colours, a Caps Lock indicator with its own colour and brightness, and from v1.2 a white balance (colour calibration) that corrects every effect.
 - [x] **Tap Dance**: A different action (each one a macro) for tap, hold, double tap and tap-then-hold.
 - [x] **Stock switches**: WASD swap, Win lock, 6KRO and Mac mode, as settings and as keys.
-- [x] **QMK extras**: Grave Escape, Repeat Key and Bootmagic (Esc held while plugging in starts the bootloader); from v1.2 One Shot keys, TO / DF layer keys, Tri Layer and a layer indicator.
+- [x] **QMK extras**: Grave Escape, Repeat Key and Bootmagic (Esc held while plugging in starts the bootloader); from v1.2 One Shot keys, TO / DF layer keys, Tri Layer and a layer indicator; from v1.3 a colour per layer and four indicator modes (effect, off, whole board, pass-through), and the lights go off while the computer is off or asleep.
 - [x] **Rescue**: A build that crashes or hangs drops into the bootloader by itself.
 
 ## Limitations
