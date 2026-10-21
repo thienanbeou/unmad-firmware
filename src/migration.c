@@ -179,6 +179,18 @@ static bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
 // The v1.5 profile layout at the current counts
 #define MIGRATION_V1_12_PROFILE_CONFIG_SIZE                                      (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                         NUM_ADVANCED_KEYS * MIGRATION_V1_5_ADVANCED_KEY_SIZE +                         NUM_MACRO_NODES * MIGRATION_V1_5_MACRO_NODE_SIZE + NUM_KEYS + 9 + 1)
 
+static bool v1_13_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_13_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+
+#if defined(RGB_NUM_LEDS)
+// + `rgb_idle_minutes`
+#define MIGRATION_V1_13_GLOBAL_CONFIG_SIZE (MIGRATION_V1_12_GLOBAL_CONFIG_SIZE + 1)
+#else
+#define MIGRATION_V1_13_GLOBAL_CONFIG_SIZE MIGRATION_V1_12_GLOBAL_CONFIG_SIZE
+#endif
+#define MIGRATION_V1_13_PROFILE_CONFIG_SIZE MIGRATION_V1_12_PROFILE_CONFIG_SIZE
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -271,13 +283,20 @@ static const migration_t migrations[] = {
         .global_config_func = v1_12_global_config_func,
         .profile_config_func = v1_12_profile_config_func,
     },
+    {
+        .version = 0x010D,
+        .global_config_size = MIGRATION_V1_13_GLOBAL_CONFIG_SIZE,
+        .profile_config_size = MIGRATION_V1_13_PROFILE_CONFIG_SIZE,
+        .global_config_func = v1_13_global_config_func,
+        .profile_config_func = v1_13_profile_config_func,
+    },
 };
 
 // An assertion to remind us to bump the persistent configuration version, and
 // implement a migration function if there is a change to the configuration
 // type. Update the assertion when a new version is added.
-_Static_assert(MIGRATION_V1_12_GLOBAL_CONFIG_SIZE +
-                       NUM_PROFILES * MIGRATION_V1_12_PROFILE_CONFIG_SIZE ==
+_Static_assert(MIGRATION_V1_13_GLOBAL_CONFIG_SIZE +
+                       NUM_PROFILES * MIGRATION_V1_13_PROFILE_CONFIG_SIZE ==
                    offsetof(eeconfig_t, magic_end),
                "Invalid configuration size");
 
@@ -801,6 +820,46 @@ bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
   }
   // Gamepad buttons, gamepad options, tick rate
   migration_memcpy(&dst, &src, NUM_KEYS + 9 + 1);
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.12 -> v1.13 Migration (this fork: lighting idle timeout)
+//--------------------------------------------------------------------+
+
+bool v1_13_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x010C)
+    // Expected version v1.12
+    return false;
+
+  // Copy the entire global configuration
+  uint8_t *const global = dst;
+  migration_memcpy(&dst, &src, MIGRATION_V1_12_GLOBAL_CONFIG_SIZE);
+  // A v1.4 install could lose the second byte of a 2-byte setting (see
+  // WL_FIRST_WORD_BYTES): the high byte of the options and the last byte of
+  // the bottom-out thresholds after a factory reset. Values no build writes
+  // mean a lost byte: back to the defaults.
+  eeconfig_t *const cfg = (eeconfig_t *)global;
+  if (cfg->options.reserved)
+    cfg->options.raw &= 0x00FF;
+  for (uint32_t i = 0; i < NUM_KEYS; i++)
+    if (cfg->bottom_out_threshold[i] > 4095)
+      cfg->bottom_out_threshold[i] = 0;
+#if defined(RGB_NUM_LEDS)
+  // Lighting idle timeout: off
+  migration_assign_uint8_t(&dst, 0);
+#endif
+
+  return true;
+}
+
+bool v1_13_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  (void)profile;
+
+  // Copy the entire profile
+  migration_memcpy(&dst, &src, MIGRATION_V1_13_PROFILE_CONFIG_SIZE);
 
   return true;
 }

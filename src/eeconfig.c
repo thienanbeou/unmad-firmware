@@ -106,6 +106,13 @@ void eeconfig_init(void) {
 #endif
 
   eeconfig = (const eeconfig_t *)wl_cache;
+  if (eeconfig->magic_start == EECONFIG_MAGIC_START &&
+      (eeconfig->version >> 8) != 0x01) {
+    // Every version is 0x01xx: a v1.4 install could lose the high byte (see
+    // WL_FIRST_WORD_BYTES), which would skip every migration
+    const uint16_t version = 0x0100 | (eeconfig->version & 0xFF);
+    EECONFIG_WRITE(version, &version);
+  }
   if (!eeconfig_is_latest_version() && !migration_try_migrate())
     eeconfig_reset();
 }
@@ -135,6 +142,9 @@ bool eeconfig_reset(void) {
 #endif
   EECONFIG_WRITE_LOCAL(active_profiles, DEFAULT_ACTIVE_PROFILES);
   EECONFIG_WRITE_LOCAL(active_layers, DEFAULT_ACTIVE_LAYERS);
+#if defined(RGB_NUM_LEDS)
+  EECONFIG_WRITE_LOCAL(rgb_idle_minutes, 0);
+#endif
   for (uint32_t i = 0; i < NUM_PROFILES; i++)
     status &= eeconfig_write_default_profile(i);
   EECONFIG_WRITE_LOCAL(magic_end, EECONFIG_MAGIC_END);

@@ -83,6 +83,27 @@ void hid_repeat_release(void);
 uint8_t hid_get_led_state(void);
 
 /**
+ * @brief Turn Caps Word on, or off when it is on
+ *
+ * @return None
+ */
+void hid_caps_word_toggle(void);
+
+/**
+ * @brief Whether Caps Word is on (it goes off by itself after 5 s idle)
+ *
+ * @return true if on
+ */
+bool hid_caps_word_active(void);
+
+/**
+ * @brief Whether a Shift is in the report now
+ *
+ * @return true if a Shift is held
+ */
+bool hid_shift_held(void);
+
+/**
  * @brief Send all HID reports
  *
  * This function will block until the device is ready to send the reports.

@@ -1085,13 +1085,37 @@ void rgb_task(void) {
     started = true;
   }
 
+  // Key presses feed the reactive effects, the typing heatmap and the idle
+  // timeout. Looked at once per millisecond (no press is shorter), not on
+  // every main loop pass, where the 61 keys cost about 15% of the loop.
+  static uint32_t last_press = 0;
+  const uint32_t now = timer_read();
+  if (now != last_hit_scan) {
+    last_hit_scan = now;
+    for (uint8_t k = 0; k < NUM_KEYS; k++) {
+      const bool is_pressed = key_matrix[k].is_pressed;
+      if (is_pressed && !bitmap_get(pressed, k)) {
+        last_press = now;
+        if (key_leds[k] != RGB_NO_LED) {
+          rgb_add_hit(key_leds[k]);
+          if (eeconfig->rgb.effect == RGB_EFFECT_TYPING_HEATMAP)
+            heatmap_hit(key_leds[k]);
+        }
+      }
+      bitmap_set(pressed, k, is_pressed);
+    }
+  }
+
   // Lights off while the host is off or asleep (not configured, or the bus
   // suspended: a powered-off laptop often keeps the port powered), as QMK
-  // RGB_MATRIX_SLEEP does. Keys still scan, so a press wakes a sleeping host.
-  // Back on, the kept frame is repainted (some effects paint only a few LEDs
-  // per frame).
+  // RGB_MATRIX_SLEEP does, and after the idle timeout without a key press
+  // (QMK RGB_MATRIX_TIMEOUT; any press wakes them). Keys still scan, so a
+  // press wakes a sleeping host. Back on, the kept frame is repainted (some
+  // effects paint only a few LEDs per frame).
   static bool dark = false;
-  if (!tud_mounted() || tud_suspended()) {
+  const uint32_t idle_ms = eeconfig->rgb_idle_minutes * 60000u;
+  if (!tud_mounted() || tud_suspended() ||
+      (idle_ms && now - last_press >= idle_ms)) {
     if (!dark) {
       dark = true;
       for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
@@ -1104,23 +1128,6 @@ void rgb_task(void) {
     dark = false;
     for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
       led_write(i, frame[i]);
-  }
-
-  // Key presses feed the reactive effects and the typing heatmap. Looked at
-  // once per millisecond (no press is shorter), not on every main loop pass,
-  // where the 61 keys cost about 15% of the loop.
-  const uint32_t now = timer_read();
-  if (now != last_hit_scan) {
-    last_hit_scan = now;
-    for (uint8_t k = 0; k < NUM_KEYS; k++) {
-      const bool is_pressed = key_matrix[k].is_pressed;
-      if (is_pressed && !bitmap_get(pressed, k) && key_leds[k] != RGB_NO_LED) {
-        rgb_add_hit(key_leds[k]);
-        if (eeconfig->rgb.effect == RGB_EFFECT_TYPING_HEATMAP)
-          heatmap_hit(key_leds[k]);
-      }
-      bitmap_set(pressed, k, is_pressed);
-    }
   }
 
   rgb_driver_flush();
@@ -1175,7 +1182,7 @@ void rgb_task(void) {
   }
 #if defined(RGB_CAPS_LOCK_KEY)
   if (!eeconfig->options.caps_indicator_disabled &&
-      (hid_get_led_state() & 0x02)) {
+      ((hid_get_led_state() & 0x02) || hid_caps_word_active())) {
     bitmap_set(lit, key_leds[RGB_CAPS_LOCK_KEY], true);
     shown[key_leds[RGB_CAPS_LOCK_KEY]] = hsv_to_rgb((hsv_t){
         cfg->caps_hue, cfg->caps_sat, M_MIN(cfg->caps_val, RGB_MAX_BRIGHTNESS)});
@@ -1204,6 +1211,61 @@ void rgb_task(void) {
 
 // Key colours per packet: 63 data bytes / 3
 #define RGB_KEY_COLORS_PER_PACKET 20
+
+// QMK RGB key steps (RGB_MATRIX_HUE_STEP etc.)
+#define RGB_HUE_STEP 8
+#define RGB_SAT_STEP 16
+#define RGB_VAL_STEP 16
+#define RGB_SPEED_STEP 16
+
+static uint8_t rgb_step(uint8_t v, int32_t by, uint8_t max) {
+  return (uint8_t)M_MIN(M_MAX((int32_t)v + by, 0), (int32_t)max);
+}
+
+void rgb_keycode(uint8_t keycode, bool reverse) {
+  // What Toggle turns back on (RAM: after a restart, the default effect)
+  static uint8_t toggled_effect = RGB_DEFAULT_EFFECT;
+  eeconfig_rgb_t cfg = eeconfig->rgb;
+  // Each pair is up / down; with Shift held they swap, as in QMK
+  const int32_t d =
+      ((keycode - SP_RGB_NEXT) % 2 == 0 ? 1 : -1) * (reverse ? -1 : 1);
+
+  switch (keycode) {
+  case SP_RGB_TOGGLE:
+    if (cfg.effect != RGB_EFFECT_OFF) {
+      toggled_effect = cfg.effect;
+      cfg.effect = RGB_EFFECT_OFF;
+    } else
+      cfg.effect = toggled_effect;
+    break;
+  case SP_RGB_NEXT:
+  case SP_RGB_PREV:
+    // Through the effects, skipping Off
+    cfg.effect = (uint8_t)((cfg.effect - 1 + d + 2 * (RGB_EFFECT_COUNT - 1)) %
+                               (RGB_EFFECT_COUNT - 1) +
+                           1);
+    break;
+  case SP_RGB_HUE_UP:
+  case SP_RGB_HUE_DOWN:
+    cfg.hue += d * RGB_HUE_STEP;
+    break;
+  case SP_RGB_SAT_UP:
+  case SP_RGB_SAT_DOWN:
+    cfg.sat = rgb_step(cfg.sat, d * RGB_SAT_STEP, 255);
+    break;
+  case SP_RGB_VAL_UP:
+  case SP_RGB_VAL_DOWN:
+    cfg.val = rgb_step(cfg.val, d * RGB_VAL_STEP, RGB_MAX_BRIGHTNESS);
+    break;
+  case SP_RGB_SPEED_UP:
+  case SP_RGB_SPEED_DOWN:
+    cfg.speed = rgb_step(cfg.speed, d * RGB_SPEED_STEP, 255);
+    break;
+  default:
+    return;
+  }
+  EECONFIG_WRITE(rgb, &cfg);
+}
 
 bool rgb_command(const uint8_t *in, uint8_t *out) {
   switch (in[0]) {
@@ -1270,6 +1332,12 @@ bool rgb_command(const uint8_t *in, uint8_t *out) {
   case COMMAND_SET_RGB_WHITE_BALANCE:
     // R, G, B gain
     return EECONFIG_WRITE_N(rgb.white_balance, &in[1], 3);
+  case COMMAND_GET_RGB_IDLE:
+    // Lights off after this many minutes without a key press, 0 = never
+    out[1] = eeconfig->rgb_idle_minutes;
+    return true;
+  case COMMAND_SET_RGB_IDLE:
+    return EECONFIG_WRITE(rgb_idle_minutes, &in[1]);
   case COMMAND_GET_RGB_LAYER: {
     // in: layer (0 = layer 1, as v1.2 configurators send); out: its layer
     // indicator hue, sat, val. A layer out of range fails, which tells a

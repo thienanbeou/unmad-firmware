@@ -48,6 +48,16 @@ void rgb_task(void);
  */
 bool rgb_command(const uint8_t *in, uint8_t *out);
 
+/**
+ * @brief An RGB key (SP_RGB_TOGGLE to SP_RGB_SPEED_DOWN) was pressed
+ *
+ * @param keycode Keycode
+ * @param reverse Go the other way (Shift held)
+ *
+ * @return None
+ */
+void rgb_keycode(uint8_t keycode, bool reverse);
+
 //--------------------------------------------------------------------+
 // LED driver (hardware)
 //--------------------------------------------------------------------+

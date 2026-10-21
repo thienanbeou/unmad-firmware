@@ -84,6 +84,10 @@ typedef enum {
   // profiles than the current one's index switch to profile 0
   COMMAND_GET_IN_USE,
   COMMAND_SET_IN_USE,
+  // Lighting idle timeout (v1.5): minutes without a key press, 0 = never
+  // (src/rgb.c)
+  COMMAND_GET_RGB_IDLE,
+  COMMAND_SET_RGB_IDLE,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;

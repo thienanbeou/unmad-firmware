@@ -43,6 +43,84 @@ static uint8_t grave_escape_keycode = KC_NO;
 #define HID_MOD_CTRL 0x11
 #define HID_MOD_SHIFT 0x22
 #define HID_MOD_GUI 0x88
+#define HID_MOD_LEFT_SHIFT 0x02
+#define HID_MOD_RIGHT_SHIFT 0x20
+
+// Caps Word (QMK, this fork v1.5): letters get Shift and - becomes _ until a
+// key that ends a word, or this long without a key press
+#define CAPS_WORD_IDLE_MS 5000
+static bool caps_word;
+static uint32_t caps_word_time;
+// The key Caps Word added Shift for; the Shift goes with it
+static uint8_t caps_word_key = KC_NO;
+
+static void hid_caps_word_unshift(void) {
+  if (caps_word_key == KC_NO)
+    return;
+  kb_report.modifiers &= ~HID_MOD_LEFT_SHIFT;
+  caps_word_key = KC_NO;
+}
+
+bool hid_caps_word_active(void) {
+  return caps_word && timer_elapsed(caps_word_time) < CAPS_WORD_IDLE_MS;
+}
+
+void hid_caps_word_toggle(void) {
+  caps_word = !hid_caps_word_active();
+  caps_word_time = timer_read();
+  if (!caps_word)
+    hid_caps_word_unshift();
+}
+
+/**
+ * @brief Caps Word's part of a key press, before the key goes in the report
+ *
+ * @param keycode Keycode (before the Mac mode swap)
+ *
+ * @return None
+ */
+static void hid_caps_word_press(uint8_t keycode) {
+  if (!hid_caps_word_active()) {
+    caps_word = false;
+    // Both Shifts together turn it on (option)
+    if (eeconfig->options.caps_word_both_shifts &&
+        ((keycode == KC_LEFT_SHIFT &&
+          (kb_report.modifiers & HID_MOD_RIGHT_SHIFT)) ||
+         (keycode == KC_RIGHT_SHIFT &&
+          (kb_report.modifiers & HID_MOD_LEFT_SHIFT)))) {
+      caps_word = true;
+      caps_word_time = timer_read();
+    }
+    return;
+  }
+
+  caps_word_time = timer_read();
+  // A letter's Shift does not carry over to the next key
+  hid_caps_word_unshift();
+  switch (keycode) {
+  case KC_A ... KC_Z:
+  case KC_MINUS:
+    if (!(kb_report.modifiers & HID_MOD_SHIFT)) {
+      kb_report.modifiers |= HID_MOD_LEFT_SHIFT;
+      caps_word_key = keycode;
+    }
+    break;
+  case KC_1 ... KC_0:
+  case KC_BACKSPACE:
+  case KC_DELETE:
+  case KC_LEFT_SHIFT:
+  case KC_RIGHT_SHIFT:
+  case KC_RIGHT_ALT:
+    // Part of the word
+    break;
+  default:
+    // Anything else ends it
+    caps_word = false;
+    break;
+  }
+}
+
+bool hid_shift_held(void) { return kb_report.modifiers & HID_MOD_SHIFT; }
 
 /**
  * @brief Swap Alt and GUI in Mac mode
@@ -140,6 +218,7 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
 void hid_init(void) {}
 
 void hid_keycode_add(uint8_t keycode) {
+  hid_caps_word_press(keycode);
   keycode = hid_mac_swap(keycode);
   const uint16_t hid_code = keycode_to_hid[keycode];
 
@@ -203,6 +282,8 @@ void hid_keycode_add(uint8_t keycode) {
 }
 
 void hid_keycode_remove(uint8_t keycode) {
+  if (keycode == caps_word_key)
+    hid_caps_word_unshift();
   keycode = hid_mac_swap(keycode);
   const uint16_t hid_code = keycode_to_hid[keycode];
 

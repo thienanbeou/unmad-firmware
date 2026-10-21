@@ -68,8 +68,10 @@ typedef union __attribute__((packed)) {
     // What the layer indicator does with the keys not bound on the layer
     // (`layer_indicator_mode_t`, v1.3 of this fork; 0 = the v1.2 behaviour)
     uint16_t layer_indicator_mode : 2;
+    // Both Shifts pressed together turn on Caps Word (v1.5 of this fork)
+    bool caps_word_both_shifts : 1;
     // Reserved bits for future use
-    uint16_t reserved : 5;
+    uint16_t reserved : 4;
   };
   uint16_t raw;
 } eeconfig_options_t;
@@ -195,7 +197,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x010C
+#define EECONFIG_VERSION 0x010D
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -230,6 +232,11 @@ typedef struct __attribute__((packed)) {
   // more; profile keys stay within them
   uint8_t active_profiles;
   uint8_t active_layers;
+#if defined(RGB_NUM_LEDS)
+  // Lights off after this many minutes without a key press, 0 = never
+  // (v1.13 of this fork)
+  uint8_t rgb_idle_minutes;
+#endif
   // End of global configurations
 
   // Profiles

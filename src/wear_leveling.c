@@ -190,7 +190,10 @@ static wear_leveling_status_t wear_leveling_replay_log(void) {
     }
 
     // Update the cache with the entry
-    memcpy(wl_cache + entry.fields.addr, entry.fields.data, entry.fields.len);
+    memcpy(wl_cache + entry.fields.addr, entry.fields.data,
+           WL_FIRST_WORD_BYTES == 1 && entry.fields.len == 2
+               ? 1
+               : entry.fields.len);
   }
 
   write_address = addr;
@@ -218,7 +221,10 @@ wear_leveling_write_raw(uint32_t addr, const void *buf, uint32_t len) {
   const uint8_t *buf8 = buf;
 
   while (len > 0) {
-    const uint32_t write_len = M_MIN(len, WL_MAX_BYTES_PER_ENTRY);
+    uint32_t write_len = M_MIN(len, WL_MAX_BYTES_PER_ENTRY);
+    if (WL_FIRST_WORD_BYTES == 1 && write_len == 2)
+      // See WL_FIRST_WORD_BYTES: 1 + 1 instead
+      write_len = 1;
     wl_log_entry_t entry = {0};
 
     entry.fields.addr = addr;

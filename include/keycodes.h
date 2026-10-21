@@ -217,6 +217,20 @@ typedef enum {
   SP_PROFILE_SWAP = 0xD2,
   SP_PROFILE_NEXT = 0xD3,
   SP_BOOT = 0xD4,
+  // This fork (v1.5): QMK RGB keys (with Shift held they go the other way)
+  // and Caps Word
+  SP_RGB_TOGGLE = 0xD5,
+  SP_RGB_NEXT = 0xD6,
+  SP_RGB_PREV = 0xD7,
+  SP_RGB_HUE_UP = 0xD8,
+  SP_RGB_HUE_DOWN = 0xD9,
+  SP_RGB_SAT_UP = 0xDA,
+  SP_RGB_SAT_DOWN = 0xDB,
+  SP_RGB_VAL_UP = 0xDC,
+  SP_RGB_VAL_DOWN = 0xDD,
+  SP_RGB_SPEED_UP = 0xDE,
+  SP_RGB_SPEED_DOWN = 0xDF,
+  SP_CAPS_WORD = 0xE0,
 
   // This fork (MAD60 HE): stock switches, each toggles an option bit
   SP_WASD_SWAP = 0xF0,

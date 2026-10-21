@@ -23,6 +23,7 @@
 #include "keycodes.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
+#include "rgb.h"
 #include "xinput.h"
 
 // Layer mask. Each bit represents whether a layer is active or not.
@@ -532,6 +533,17 @@ void layout_register(uint8_t key, uint8_t keycode) {
     hid_repeat_press();
     should_send_reports = true;
     break;
+
+  case SP_CAPS_WORD:
+    hid_caps_word_toggle();
+    should_send_reports = true;
+    break;
+
+#if defined(RGB_NUM_LEDS)
+  case SP_RGB_TOGGLE ... SP_RGB_SPEED_DOWN:
+    rgb_keycode(keycode, hid_shift_held());
+    break;
+#endif
 
   default:
     break;

@@ -57,7 +57,11 @@ FIXTURE = [   # (type, layer, key, ...)
 # and K lead back (TO(0), DF(0))
 OSM_R, OSL_T, TO_Y, DF_U, TL_LOWER_I, TL_UPPER_O, PROBE_P = 33, 34, 35, 36, 37, 38, 39
 OSM_LSHIFT, OSL_3, TO_3, DF_3, TO_0, DF_0 = 0xB9, 0xB3, 0xA3, 0xAB, 0xA0, 0xA8
-KEYMAP = [(1, RBRC_S, "RIGHT_BRACKET"), (1, GESC_C, "SP_GRAVE_ESCAPE"),
+# Caps Word and RGB keys (v1.5) on layer 1: Fn + Z, X, comma, period
+CW_Z, VAL_UP_X, RGB_NEXT_COMMA, RGB_TOGGLE_DOT = 42, 43, 49, 50
+KEYMAP = [(1, CW_Z, "SP_CAPS_WORD"), (1, VAL_UP_X, "SP_RGB_VAL_UP"),
+          (1, RGB_NEXT_COMMA, "SP_RGB_NEXT"), (1, RGB_TOGGLE_DOT, "SP_RGB_TOGGLE"),
+          (1, RBRC_S, "RIGHT_BRACKET"), (1, GESC_C, "SP_GRAVE_ESCAPE"),
           (1, REPEAT_V, "SP_REPEAT_KEY"), (1, LLOCK_B, "SP_LAYER_LOCK"),
           (0, OSM_R, OSM_LSHIFT), (0, OSL_T, OSL_3), (0, TO_Y, TO_3), (0, DF_U, DF_3),
           (0, TL_LOWER_I, "SP_TRI_LAYER_LOWER"), (0, TL_UPPER_O, "SP_TRI_LAYER_UPPER"),
@@ -479,6 +483,54 @@ check(f"26 in use: first {list(first[1:])}, out of range refused, 8 x 8 set, bac
       f"layer 7 key / advanced key and profile 5 cleared, layer 0 kept", [],
       first[1:] == bytes([4, 6]) and refused == [0xFF] * 4 and grown and staged and shrunk and profile == 0
       and cleared)
+
+# Caps Word (v1.5, Fn + Z): letters and - get Shift (- -> _), digits keep it
+# on unshifted, Space ends it; off by itself after 5 s; with option bit 11,
+# both Shifts together turn it on
+MINUS_KEY, SPACE, R_SHIFT = 11, 56, 52
+HID_MINUS, HID_SPACE = 0x2D, 0x2C
+OPT_CW_SHIFTS = 1 << 11
+cw = report({FN: [(10, 40)], CW_Z: [(20, 30)], A: [(60, 80), (180, 200), (260, 280)],
+             MINUS_KEY: [(100, 120)], KEY_1: [(140, 160)], SPACE: [(220, 240)]},
+            [70, 90, 110, 150, 190, 230, 270], fn=False)
+shifts_on = report({L_SHIFT: [(10, 50)], R_SHIFT: [(20, 50)], A: [(80, 100)]}, [90], fn=False,
+                   options=base | OPT_CW_SHIFTS)
+shifts_off = report({L_SHIFT: [(10, 50)], R_SHIFT: [(20, 50)], A: [(80, 100)]}, [90], fn=False,
+                    options=base)
+b.restore(snap)
+b.run(S["layout_register"], count=2_000_000, args=(0, KC["SP_CAPS_WORD"]), reset_sp=True)
+b.run(S["hid_caps_word_active"], count=100_000, reset_sp=True)
+on_now = b.reg(UC_ARM_REG_R0) & 1
+b.w32(S["uwTick"], b.r32(S["uwTick"]) + 5_001)
+b.run(S["hid_caps_word_active"], count=100_000, reset_sp=True)
+off_later = b.reg(UC_ARM_REG_R0) & 1
+check("27 Caps Word: A -> Shift+A, - -> Shift+-, 1 unshifted, A again shifted, Space ends it, "
+      "then plain a; off after 5 s; both Shifts turn it on with option bit 11", [],
+      (cw[0][0], keys_in(cw[0])) == (0x02, {HID_A}) and (cw[1][0], keys_in(cw[1])) == (0, set())
+      and (cw[2][0], keys_in(cw[2])) == (0x02, {HID_MINUS}) and (cw[3][0], keys_in(cw[3])) == (0, {HID_1})
+      and cw[4][0] == 0x02 and (cw[5][0], keys_in(cw[5])) == (0, {HID_SPACE})
+      and (cw[6][0], keys_in(cw[6])) == (0, {HID_A})
+      and on_now == 1 and off_later == 0
+      and shifts_on[0][0] == 0x02 and shifts_off[0][0] == 0)
+
+
+# RGB keys (v1.5): Fn + X brightness up 16, with Shift down 16; Fn + comma
+# next effect; Fn + period off, again back to the effect it had
+def rgb_after(keys, ms):
+    play(keys, ms, fn=False)
+    return bytes(b.uc.mem_read(b.r32(S["eeconfig"]) + 136, 5))    # effect, hue, sat, val, speed
+
+
+start = rgb_after({}, 5)
+up = rgb_after({FN: [(10, 60)], VAL_UP_X: [(20, 40)]}, 80)
+down = rgb_after({FN: [(10, 60)], L_SHIFT: [(15, 50)], VAL_UP_X: [(20, 40)]}, 80)
+nxt = rgb_after({FN: [(10, 60)], RGB_NEXT_COMMA: [(20, 40)]}, 80)
+off = rgb_after({FN: [(10, 60)], RGB_TOGGLE_DOT: [(20, 40)]}, 80)
+back = rgb_after({FN: [(10, 120)], RGB_TOGGLE_DOT: [(20, 40), (70, 90)]}, 140)
+check(f"28 RGB keys: brightness {start[3]} -> {up[3]} / Shift {down[3]}, effect {start[0]} -> next "
+      f"{nxt[0]}, toggle -> {off[0]} -> {back[0]}", [],
+      up[3] == min(start[3] + 16, 255) and down[3] == start[3] - 16 and nxt[0] == start[0] + 1
+      and off[0] == 0 and back[0] == start[0])
 
 print("all ok" if ok else "FAILED")
 sys.exit(0 if ok else 1)

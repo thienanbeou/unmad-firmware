@@ -41,6 +41,13 @@ _Static_assert(WL_BACKING_STORE_SIZE <= FLASH_SIZE,
 
 #define WL_LOG_ENTRY_SIZE 8
 #define WL_MAX_BYTES_PER_ENTRY (WL_VIRTUAL_SIZE <= 8192 ? 6 : 5)
+// Data bytes in an entry's first word: the header is 2 bytes up to 8 KB, 3
+// bytes above (14-bit address, 10-bit length). An entry takes a second word
+// when it holds more. Upstream wrote and read the second word only above 2
+// bytes, which lost the second byte of a 2-byte entry above 8 KB (Unmad v1.4);
+// so above 8 KB no 2-byte entry is written any more, and one in an old log
+// gives only its first byte (the second never reached the flash).
+#define WL_FIRST_WORD_BYTES (WL_VIRTUAL_SIZE <= 8192 ? 2 : 1)
 
 typedef union __attribute__((packed)) {
   struct __attribute__((packed)) {

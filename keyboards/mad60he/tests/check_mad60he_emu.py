@@ -274,6 +274,30 @@ if "rgb_slots" in syms:
         b.w32(syms["uwTick"], tick)
         b.run(syms["board_task"], 3_000_000)
 
+    # 10b. Idle timeout (v1.5): off by default; set to 1 minute, the LEDs go
+    # dark a minute after the last key press (none since boot here) and a key
+    # press brings them back at once; 0 turns it off again
+    if "rgb_keycode" in syms:
+        ok, out = command(0xEF)
+        assert ok and out[1] == 0, f"idle timeout default {out[1]}"
+        frame(TICK + 59_000)
+        assert any(c != (0, 0, 0) for c in leds()), "dark before the timeout"
+        ok, _ = command(0xF0, 1)
+        assert ok and command(0xEF)[1][1] == 1, "SET_RGB_IDLE"
+        frame(TICK + 60_000)
+        frame(TICK + 61_000)
+        assert leds() == [(0, 0, 0)] * 61, "lit after the idle timeout"
+        b.uc.mem_write(syms["key_matrix"] + 29 * 10 + 9, b"\x01")      # A pressed
+        frame(TICK + 61_001)
+        b.uc.mem_write(syms["key_matrix"] + 29 * 10 + 9, b"\x00")
+        assert any(c != (0, 0, 0) for c in leds()), "a key press did not wake the LEDs"
+        frame(TICK + 61_002)
+        ok, _ = command(0xF0, 0)
+        frame(TICK + 200_000)
+        assert any(c != (0, 0, 0) for c in leds()), "dark with the idle timeout off"
+        print("10b idle timeout: off by default; 1 minute -> dark after a minute without a key, "
+              "a key press wakes them; 0 -> stays lit")
+
     ok, out = command(0xE0)
     assert ok and list(out[1:9]) == [13, 0, 255, 210, 70, NUM_EFFECTS, int(cfg["RGB_MAX_BRIGHTNESS"]), 255], f"GET_RGB {list(out[1:9])}"
     # Colour range: Rainbow Pinwheels folded into a band around hue 100

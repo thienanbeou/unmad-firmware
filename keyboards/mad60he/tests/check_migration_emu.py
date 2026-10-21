@@ -60,7 +60,36 @@ def config(b):
 old = boot(OLD)
 old_cfg = config(old)
 old_version = struct.unpack_from("<H", old_cfg, 4)[0]
-assert old_version in range(0x0105, 0x010C), f"old build stores version {old_version:#x}"
+assert old_version in range(0x0105, 0x010D), f"old build stores version {old_version:#x}"
+
+if old_version == 0x010C:
+    # v1.4 (settings v1.12, already 8 x 8 in 16 KB): only the idle timeout
+    # byte is added after the global settings; everything else byte for byte
+    old_end = old_cfg.index(MAGIC_END)
+    new = boot(NEW, bytes(old.uc.mem_read(SECTOR11, SECTOR_SIZE)))
+    new_cfg = config(new)
+    new_end = new_cfg.index(MAGIC_END)
+    g = 14 + NUM_KEYS * 2 + 216 + 2                # global v1.12: v1.5 block, lighting, in use
+    assert struct.unpack_from("<H", new_cfg, 4)[0] == 0x010D, "new build did not migrate"
+    assert new_cfg[6:g] == old_cfg[6:g], "global settings changed"
+    assert new_cfg[g] == 0, "idle timeout not off"
+    assert new_cfg[g + 1:new_end] == old_cfg[g:old_end], "profiles changed"
+    again = boot(NEW, bytes(new.uc.mem_read(SECTOR11, SECTOR_SIZE)))
+    assert config(again)[:new_end + 4] == new_cfg[:new_end + 4], "second boot changed the configuration"
+    # v1.4 lost the second byte of 2-byte log entries (the version and the
+    # options above came through only by the repair); now a 2-byte write
+    # survives a restart
+    eecfg = again.r32(again.syms["eeconfig"])
+    off = eecfg - again.r32(again.syms["eeconfig"])           # eeconfig = wl_cache
+    again.uc.mem_write(BUF, bytes([0x34, 0x12]))
+    again.run(again.syms["wear_leveling_write"], 3_000_000, (132, BUF, 2))   # options
+    third = boot(NEW, bytes(again.uc.mem_read(SECTOR11, SECTOR_SIZE)))
+    assert config(third)[132:134] == bytes([0x34, 0x12]), f"2-byte write lost: {config(third)[132:134].hex()}"
+    print(f"migration v1.12 -> v1.13: {old_end} -> {new_end} bytes, everything kept (version and "
+          "options repaired after v1.4's lost bytes), idle timeout off; second boot stable; a 2-byte "
+          "write survives a restart")
+    print("all ok")
+    sys.exit(0)
 
 GLOBAL_V15 = 14 + NUM_KEYS * 2                    # MIGRATION_V1_5_GLOBAL_CONFIG_SIZE
 RGB_V16 = 5 + NUM_KEYS * 3
@@ -73,7 +102,7 @@ RGB_SIZE = RGB_V111 + 12                           # + layers 4-7 (v1.12)
 OLD_RGB = {0x0105: 0, 0x0106: RGB_V16, 0x0107: RGB_V17, 0x0108: RGB_V18, 0x0109: RGB_V19,
            0x010A: RGB_V110, 0x010B: RGB_V111}[old_version]
 OLD_GLOBAL = GLOBAL_V15 + OLD_RGB
-NEW_GLOBAL = GLOBAL_V15 + RGB_SIZE + 2             # + profiles and layers in use
+NEW_GLOBAL = GLOBAL_V15 + RGB_SIZE + 2 + 1         # + profiles and layers in use (v1.12), idle timeout (v1.13)
 
 # A tap dance (slot 0) and a macro (slot 1) in every old profile, written
 # through the old build's wear-leveling log (so the new build replays the
@@ -102,7 +131,7 @@ new = boot(NEW, sector)
 new_cfg = config(new)
 assert new_cfg[:4] == old_cfg[:4], "magic_start"
 new_version = struct.unpack_from("<H", new_cfg, 4)[0]
-assert new_version == 0x010C, f"new build did not migrate (version {new_version:#x})"
+assert new_version == 0x010D, f"new build did not migrate (version {new_version:#x})"
 new_end = new_cfg.index(MAGIC_END)
 assert new_end == NEW_GLOBAL + NEW_PROFILES * NEW_P, f"new layout {new_end}"
 
@@ -127,8 +156,9 @@ hues = [170, 85, 0, 43, 128, 213, 21]              # layers 1-7: blue, green, re
 layers = [x for h in hues for x in (h, 255, val)]
 start = max(OLD_RGB, RGB_V19)
 assert list(rgb[start:]) == layers[start - RGB_V19:], f"layer colours {list(rgb[RGB_V19:])}"
-in_use = list(new_cfg[GLOBAL_V15 + RGB_SIZE:NEW_GLOBAL])
+in_use = list(new_cfg[GLOBAL_V15 + RGB_SIZE:GLOBAL_V15 + RGB_SIZE + 2])
 assert in_use == [4, 6], f"profiles / layers in use {in_use}"
+assert new_cfg[NEW_GLOBAL - 1] == 0, "idle timeout not off"
 
 # Profiles 0-3: every old byte, the new layers transparent, the new slots empty
 for p in range(OLD_PROFILES):
@@ -158,12 +188,12 @@ fresh = config(boot(NEW))
 for p in range(OLD_PROFILES, NEW_PROFILES):
     at = NEW_GLOBAL + p * NEW_P
     assert new_cfg[at:at + NEW_P] == fresh[at:at + NEW_P], f"profile {p} not the defaults"
-assert list(fresh[GLOBAL_V15 + RGB_SIZE:NEW_GLOBAL]) == [4, 6], "fresh in use"
+assert list(fresh[GLOBAL_V15 + RGB_SIZE:NEW_GLOBAL]) == [4, 6, 0], "fresh in use / idle"
 
 writes = [a for a in new.flash_writes if SECTOR11 <= a < SECTOR11 + SECTOR_SIZE]
 assert writes, "migration not written to flash"
 assert all(a >= SECTOR11 for a in new.flash_writes), "flash write below sector 11"
-print(f"migration v{old_version >> 8}.{old_version & 255} -> v1.12: {old_end} -> {new_end} bytes "
+print(f"migration v{old_version >> 8}.{old_version & 255} -> v1.13: {old_end} -> {new_end} bytes "
       f"(8 KB legacy store -> 16 KB), global settings and the {OLD_PROFILES} old profiles kept "
       f"(tap dance / macro / last slots written through the old log), new layers transparent, "
       f"new advanced key / macro slots empty, profiles 4-7 default, lighting "
