@@ -16,7 +16,7 @@ but going back to the stock firmware is one command (below).
 
 You need: the keyboard plugged in by USB, Python 3, and the
 [release files](https://github.com/thienanbeou/unmad-firmware/releases)
-`unmad-firmware-mad60he-v1.4.bin` and `fwtool.py` in one folder.
+`unmad-firmware-mad60he-v1.5.bin` and `fwtool.py` in one folder.
 
 1. Install the HID library once: `pip install hidapi`.
    Linux only: allow access without root, then replug:
@@ -28,7 +28,7 @@ You need: the keyboard plugged in by USB, Python 3, and the
 2. Close the vendor's web app or driver if it is open.
 3. Flash (about 10 seconds; keep the cable in):
 
-       python fwtool.py flash unmad-firmware-mad60he-v1.4.bin --yes --keep-settings
+       python fwtool.py flash unmad-firmware-mad60he-v1.5.bin --yes --keep-settings
 
    `--keep-settings` leaves your stock settings untouched in flash, so they
    are still there if you go back.
@@ -222,6 +222,13 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   dark, light the whole board in the layer colour (QMK's two examples), or
   pass-through (transparent keys light too when the layer below gives them
   a key).
+- v1.5: RGB keys (the Lighting section of the key list: lighting on / off,
+  next / previous effect, hue, saturation, brightness and speed up / down;
+  with Shift held each goes the other way), Caps Word (Special keys:
+  CAPITALS and - as _ until the end of the word, 5 s idle ends it, the Caps
+  Lock key lights meanwhile; a Settings switch lets both Shifts start it)
+  and a lighting idle timeout in Settings (off after 1-60 minutes without a
+  key press, any key wakes it).
 - Profiles and layers (v1.4): room for 8 profiles x 8 layers, with 40
   advanced keys and 160 macro steps per profile (v1.3: 4 x 4, 32 and 128).
   4 profiles and 6 layers are in use at first; the configurator's "+" next
