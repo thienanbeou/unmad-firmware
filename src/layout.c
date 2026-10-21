@@ -403,12 +403,37 @@ bool layout_set_in_use(uint8_t profiles, uint8_t layers) {
       layers > NUM_LAYERS)
     return false;
 
+  // Profiles and layers taken out of use are cleared, so adding them back
+  // starts fresh: profiles to their defaults, layers to transparent (in every
+  // profile) without their advanced keys
+  bool status = true;
+  for (uint8_t p = profiles; p < eeconfig->active_profiles; p++)
+    status &= eeconfig_reset_profile(p);
+  if (layers < eeconfig->active_layers) {
+    static const advanced_key_t no_key = {0};
+    uint8_t transparent[NUM_KEYS];
+    memset(transparent, KC_TRANSPARENT, sizeof(transparent));
+    advanced_key_clear();
+    for (uint8_t p = 0; p < profiles; p++) {
+      for (uint8_t l = layers; l < eeconfig->active_layers; l++)
+        status &= EECONFIG_WRITE(profiles[p].keymap[l], &transparent);
+      for (uint8_t i = 0; i < NUM_ADVANCED_KEYS; i++)
+        if (eeconfig->profiles[p].advanced_keys[i].type != AK_TYPE_NONE &&
+            eeconfig->profiles[p].advanced_keys[i].layer >= layers)
+          status &= EECONFIG_WRITE(profiles[p].advanced_keys[i], &no_key);
+    }
+    layout_load_advanced_keys();
+    // Nothing stays on a removed layer
+    layer_mask &= (1 << layers) - 1;
+    if (default_layer >= layers)
+      default_layer = 0;
+  }
+
   const uint8_t in_use[2] = {profiles, layers};
-  if (!EECONFIG_WRITE_N(active_profiles, in_use, sizeof(in_use)))
-    return false;
+  status &= EECONFIG_WRITE_N(active_profiles, in_use, sizeof(in_use));
   if (eeconfig->current_profile >= profiles)
-    return layout_set_profile(0);
-  return true;
+    status &= layout_set_profile(0);
+  return status;
 }
 
 void layout_register(uint8_t key, uint8_t keycode) {

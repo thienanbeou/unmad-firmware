@@ -64,6 +64,10 @@ uint8_t layout_current_keycode(uint8_t key);
 /**
  * @brief Set the profiles and layers in use
  *
+ * Profiles and layers taken out of use are cleared: profiles to their
+ * defaults, layers to transparent in every profile, without their advanced
+ * keys. Profile 0 and layer 0 always stay.
+ *
  * @param profiles 1 to NUM_PROFILES
  * @param layers 1 to NUM_LAYERS
  *

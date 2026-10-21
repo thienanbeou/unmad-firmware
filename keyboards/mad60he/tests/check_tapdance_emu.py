@@ -451,11 +451,34 @@ def reply(*payload):
 first = reply(0xED)
 refused = [reply(0xEE, *v)[0] for v in ((0, 6), (4, 0), (9, 6), (4, 9))]
 grown = reply(0xEE, 8, 8)[0] == 0xEE and reply(0xED)[1:] == bytes([8, 8])
+
+
+def keycode(profile, layer, key):
+    return reply(128, profile, layer, key)[1]
+
+
+def ak_slot(profile, slot):
+    out = reply(132, profile, (slot * 12) & 0xFF, (slot * 12) >> 8)
+    return bytes(b.uc.mem_read(S["out_buf"] + 2, 12))
+
+
+# Something to clear: a key on layer 7, a toggle key on layer 7 (last slot),
+# a key on profile 5; and something to keep on layer 0 / profile 0
+default_p5 = keycode(5, 0, 0)
+command(129, 0, 7, 0, 1, KC["A"])
+command(129, 0, 0, 1, 1, KC["B"])
+command(129, 5, 0, 0, 1, KC["C"])
+command(133, 0, (39 * 12) & 0xFF, (39 * 12) >> 8, 12, 7, 5, 4, KC["D"], 200, 0, 0, 0, 0, 0, 0, 0)
+staged = ak_slot(0, 39)[:3] == bytes([7, 5, 4]) and keycode(0, 7, 0) == KC["A"]
 b.uc.mem_write(b.r32(S["eeconfig"]) + 134, b"\x05")
 shrunk = reply(0xEE, 4, 6)[0] == 0xEE and reply(0xED)[1:] == bytes([4, 6])
 profile = b.uc.mem_read(b.r32(S["eeconfig"]) + 134, 1)[0]
-check(f"26 in use: first {list(first[1:])}, out of range refused, 8 x 8 set, back to 4 x 6 -> profile {profile}", [],
-      first[1:] == bytes([4, 6]) and refused == [0xFF] * 4 and grown and shrunk and profile == 0)
+cleared = (keycode(0, 7, 0) == 1 and ak_slot(0, 39) == bytes(12) and keycode(5, 0, 0) == default_p5
+           and keycode(0, 0, 1) == KC["B"])
+check(f"26 in use: first {list(first[1:])}, out of range refused, 8 x 8 set, back to 4 x 6 -> profile {profile}, "
+      f"layer 7 key / advanced key and profile 5 cleared, layer 0 kept", [],
+      first[1:] == bytes([4, 6]) and refused == [0xFF] * 4 and grown and staged and shrunk and profile == 0
+      and cleared)
 
 print("all ok" if ok else "FAILED")
 sys.exit(0 if ok else 1)

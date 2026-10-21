@@ -79,8 +79,9 @@ typedef enum {
   COMMAND_GET_RGB_LAYER,
   COMMAND_SET_RGB_LAYER,
   // Profiles and layers in use (v1.4): out / in: profiles, layers (1 to
-  // NUM_PROFILES / NUM_LAYERS; fewer profiles than the current one's index
-  // switch to profile 0)
+  // NUM_PROFILES / NUM_LAYERS). Fewer clears the ones taken out (profiles to
+  // defaults, layers to transparent without their advanced keys); fewer
+  // profiles than the current one's index switch to profile 0
   COMMAND_GET_IN_USE,
   COMMAND_SET_IN_USE,
 
