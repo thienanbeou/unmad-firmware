@@ -110,7 +110,14 @@ static void board_rescue_init(void) {
 
   // Our previous boot left the counters (and armed the watchdog). RAM survives
   // a pass through the vendor bootloader (checked on the MAD60 HE, 2026-10-17).
-  const bool counters_valid = BOARD_RESCUE_MAGIC_WORD == BOARD_RESCUE_MAGIC;
+  // It can also survive a short power dip, such as a laptop switching its USB
+  // power while it boots, so a power-on or brown-out reset starts from zero:
+  // otherwise two dips before USB is configured send the board to the
+  // bootloader.
+  const bool power_on =
+      board_reset_flags & ((RCC_CSR_PORRSTF | RCC_CSR_BORRSTF) >> 24);
+  const bool counters_valid =
+      !power_on && BOARD_RESCUE_MAGIC_WORD == BOARD_RESCUE_MAGIC;
   if (!counters_valid) {
     BOARD_RESCUE_MAGIC_WORD = BOARD_RESCUE_MAGIC;
     BOARD_FAILED_BOOTS = 0;

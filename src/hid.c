@@ -17,6 +17,7 @@
 
 #include "commands.h"
 #include "eeconfig.h"
+#include "hardware/hardware.h"
 #include "keycodes.h"
 #include "matrix.h"
 #include "tusb.h"
@@ -286,21 +287,46 @@ void hid_repeat_release(void) {
 
 uint8_t hid_get_led_state(void) { return led_state; }
 
+#if !defined(HID_DISABLED)
+// Long enough for a host to resume after a remote wakeup
+#define HID_READY_TIMEOUT_MS 100
+
+/**
+ * @brief Wait for an interface to be ready, but not for a host that is asleep
+ *
+ * A host that is off or asleep with USB power still on never polls. Waiting
+ * for it forever stopped the main loop until the watchdog sent the board to
+ * the bootloader. The report is dropped instead; the next one carries the
+ * current state.
+ *
+ * @param instance HID interface
+ *
+ * @return Whether the interface is ready
+ */
+static bool hid_wait_ready(uint8_t instance) {
+  const uint32_t start = timer_read();
+  while (!tud_hid_n_ready(instance)) {
+    if (timer_elapsed(start) >= HID_READY_TIMEOUT_MS)
+      return false;
+    tud_task();
+  }
+  return true;
+}
+#endif
+
 void hid_send_reports(void) {
 #if !defined(HID_DISABLED)
   if (tud_suspended())
     // Wake up the host if it's suspended
     tud_remote_wakeup();
 
-  while (!tud_hid_n_ready(USB_ITF_KEYBOARD))
-    // Wait for the keyboard interface to be ready
-    tud_task();
+  if (!hid_wait_ready(USB_ITF_KEYBOARD))
+    return;
 
   hid_send_keyboard_report();
 
-  while (!tud_hid_n_ready(USB_ITF_HID))
-    // Wait for the HID interface to be ready
-    tud_task();
+  if (!hid_wait_ready(USB_ITF_HID))
+    return;
 
   // Start from the first report ID
   hid_send_hid_report(REPORT_ID_SYSTEM_CONTROL);

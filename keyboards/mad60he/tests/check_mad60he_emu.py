@@ -94,6 +94,12 @@ r = boot(ram={RESCUE: RESCUE_MAGIC, FAILS: 2})
 assert r["r32"](FLAG) == BOOT_MAGIC and any(AIRCR_RESET(a, v) for a, v in r["log"])
 assert first(r["log"], PLLCFGR) is None and not r["flash_writes"], "did work before rescue"
 print("2 after 2 failed boots: marker + reset before clocks or flash")
+# same counters, but a power-on / brown-out reset (RAM kept through a short dip)
+for flags in (1 << 27, 1 << 25):
+    r = boot(regs={0x40023874: flags | 1 << 26}, ram={RESCUE: RESCUE_MAGIC, FAILS: 2})
+    assert not any(AIRCR_RESET(a, v) for a, v in r["log"]), f"rescued after power-on {flags:#x}"
+    assert r["r32"](FAILS) == 1 and r["r32"](BOOTS) == 1, "counters not restarted"
+print("2b power-on / brown-out reset: counters restart, no rescue")
 
 # 3. bootloader left the PLL running as the system clock
 r = boot(regs={0x40023800: 0x01010001, 0x40023808: 0x0000000A})
