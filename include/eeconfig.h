@@ -65,11 +65,25 @@ typedef union __attribute__((packed)) {
     // Layer indicator on the RGB off (v1.2 of this fork, stored inverted like
     // the Caps Lock one)
     bool layer_indicator_disabled : 1;
+    // What the layer indicator does with the keys not bound on the layer
+    // (`layer_indicator_mode_t`, v1.3 of this fork; 0 = the v1.2 behaviour)
+    uint16_t layer_indicator_mode : 2;
     // Reserved bits for future use
-    uint16_t reserved : 7;
+    uint16_t reserved : 5;
   };
   uint16_t raw;
 } eeconfig_options_t;
+
+// Layer indicator modes: the keys bound on the layer light in its colour and
+// the others keep the effect or go dark; or the whole board lights in it (the
+// two QMK examples); or transparent keys light too when they pass through to
+// a key that does something
+typedef enum {
+  LAYER_INDICATOR_EFFECT = 0,
+  LAYER_INDICATOR_OFF,
+  LAYER_INDICATOR_WHOLE_BOARD,
+  LAYER_INDICATOR_PASS_THROUGH,
+} layer_indicator_mode_t;
 
 _Static_assert(sizeof(eeconfig_options_t) == sizeof(uint16_t),
                "Invalid eeconfig_options_t size");
@@ -158,12 +172,13 @@ typedef struct __attribute__((packed)) {
   // White balance (added in v1.9): R, G, B gain applied to every LED, 255 =
   // unchanged. The LEDs are not colour balanced (white can look blue-green).
   uint8_t white_balance[3];
-  // Layer indicator colour in QMK HSV (added in v1.10): while a layer other
-  // than 0 is on, its keys that do something light in it
-  uint8_t layer_hue;
-  uint8_t layer_sat;
-  uint8_t layer_val;
+  // Layer indicator colour in QMK HSV per layer, from layer 1 (layer 1's
+  // added in v1.10, the others in v1.11): while a layer other than 0 is on,
+  // its keys that do something light in it
+  uint8_t layer_hsv[NUM_LAYERS - 1][3];
 } eeconfig_rgb_t;
+
+_Static_assert(NUM_LAYERS >= 2, "The layer indicator needs 2 layers or more");
 #endif
 
 // Keyboard profile configuration
@@ -180,7 +195,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x010A
+#define EECONFIG_VERSION 0x010B
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -262,10 +277,17 @@ extern const eeconfig_t *eeconfig;
       .caps_sat = 0,                                                           \
       .caps_val = RGB_DEFAULT_VAL,                                             \
       .white_balance = {255, 255, 255},                                        \
-      .layer_hue = 170,                                                        \
-      .layer_sat = 255,                                                        \
-      .layer_val = RGB_DEFAULT_VAL,                                            \
+      .layer_hsv = RGB_DEFAULT_LAYER_HSV,                                      \
   }
+#endif
+
+#if defined(RGB_NUM_LEDS) && !defined(RGB_DEFAULT_LAYER_HSV)
+// Layer indicator colours: blue, green, red (one per layer from layer 1; a
+// board with more than 4 layers sets its own, or the rest stay off)
+#define RGB_DEFAULT_LAYER_HSV                                                  \
+  {{170, 255, RGB_DEFAULT_VAL},                                                \
+   {85, 255, RGB_DEFAULT_VAL},                                                 \
+   {0, 255, RGB_DEFAULT_VAL}}
 #endif
 
 #if !defined(DEFAULT_ACTUATION_POINT)

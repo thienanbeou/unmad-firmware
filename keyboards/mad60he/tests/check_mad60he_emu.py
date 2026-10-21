@@ -36,13 +36,15 @@ def boot(ram=None, regs=None, start=None, count=3_000_000, args=()):
                 hot=sorted(b.hot, key=b.hot.get)[-1])
 
 
-def booted(start, ram=None, count=50_000, args=()):
+def booted(start, ram=None, count=50_000, args=(), ram8=None):
     """Cold boot (stops in analog_init, after eeconfig_init), then call `start`
     the way the main loop would: with the configuration loaded."""
     b = Board(ELF)
     b.run(None, 3_000_000)
     for a, v in (ram or {}).items():
         b.w32(a, v)
+    for a, v in (ram8 or {}).items():
+        b.uc.mem_write(a, bytes([v]))
     b.log.clear()
     b.flash_writes.clear()
     b.run(start, count, args)
@@ -183,7 +185,11 @@ if "rgb_slots" in syms:
     key_leds = list(map(int, re.findall(r"\d+", CONFIG_H[CONFIG_H.index("#define RGB_KEY_LEDS"):CONFIG_H.index("#define RGB_MATRIX_LEDS")])))
     assert len(pts) == 61 and len(key_leds) == 61
     TICK = 12345
-    r = booted(syms["board_task"], {RESCUE: RESCUE_MAGIC, FAILS: 0, syms["uwTick"]: TICK}, 3_000_000)
+    # TinyUSB _usbd_dev: byte 0 flags (bit 2 suspended), byte 1 cfg_num. The
+    # lights are on only while the host has configured the board.
+    USB_FLAGS, USB_CFG = syms["_usbd_dev"], syms["_usbd_dev"] + 1
+    r = booted(syms["board_task"], {RESCUE: RESCUE_MAGIC, FAILS: 0, syms["uwTick"]: TICK}, 3_000_000,
+               ram8={USB_CFG: 1})
     b, sh = r["board"], r["shadow"]
     assert sh.get(0x40000428) == 0 and sh.get(0x4000042C) == 1049, "TIM3 PSC / ARR"
     assert (sh.get(0x4000041C, 0) >> 8) & 0xF8 == 0x68, "TIM3 CH4 not PWM1 with preload"
@@ -242,6 +248,18 @@ if "rgb_slots" in syms:
                      int(cfg["RGB_DEFAULT_VAL"]), int(cfg["RGB_DEFAULT_SPEED"]))
     got = leds()
     assert got == want, f"default effect (led, got, want): {bad(got, want)}"
+    # Host off or asleep (bus suspended, or not configured): all dark; back on:
+    # the same frame again, without waiting for the next one
+    for flags, cfg_num in ((1 << 2, 1), (0, 0)):
+        b.uc.mem_write(USB_FLAGS, bytes([flags]))
+        b.uc.mem_write(USB_CFG, bytes([cfg_num]))
+        b.run(syms["board_task"], 3_000_000)
+        assert leds() == [(0, 0, 0)] * 61, f"lit with host off (flags {flags}, cfg {cfg_num})"
+        b.uc.mem_write(USB_FLAGS, bytes([0]))
+        b.uc.mem_write(USB_CFG, bytes([1]))
+        b.run(syms["board_task"], 3_000_000)
+        assert leds() == want, f"not restored: {bad(leds(), want)}"
+    print("10a host off / asleep: LEDs dark, the frame comes back on wake")
 
     BUF_IN, BUF_OUT = 0x20010000, 0x20010100
 
@@ -528,8 +546,50 @@ if "rgb_slots" in syms:
         ok, _ = command(0xEC, 85, 255, 255)
         ok2, out = command(0xEB)
         assert ok and list(out[1:4]) == [85, 255, min(255, int(cfg["RGB_MAX_BRIGHTNESS"]))], "SET_RGB_LAYER"
+        # v1.3: a colour per layer (byte 1 of GET / byte 4 of SET is the layer,
+        # 0 = layer 1, a layer out of range fails), defaults blue / green / red
+        ok, out = command(0xEB, 1)
+        assert ok and out[1] == 85, "GET_RGB_LAYER layer 1"
+        ok, out = command(0xEB, 2)
+        assert ok and list(out[1:4]) == [85, 255, int(cfg["RGB_DEFAULT_VAL"])], f"layer 2 default {list(out[1:4])}"
+        ok, out = command(0xEB, 3)
+        assert ok and list(out[1:4]) == [0, 255, int(cfg["RGB_DEFAULT_VAL"])], f"layer 3 default {list(out[1:4])}"
+        assert not command(0xEB, 4)[0] and not command(0xEC, 0, 0, 0, 4)[0], "layer 4 accepted"
+        ok, _ = command(0xEC, 43, 255, 200, 2)
+        ok2, out = command(0xEB, 2)
+        assert ok and list(out[1:4]) == [43, 255, 200], "SET_RGB_LAYER layer 2"
+        assert command(0xEB, 1)[1][1] == 85, "layer 2's colour reached layer 1"
+        ok, _ = command(0xEC, 170, 255, int(cfg["RGB_DEFAULT_VAL"]), 1)  # layer 1 blue again
+        keymap = json.loads((BOARD / "keyboard.json").read_text())["keymap"]
+        pass_lit = lit | {key_leds[k] for k, kc in enumerate(keymap1)
+                          if kc == "KC_TRNS" and keymap[0][k] != "KC_NO"}
+        for mode, rest, on in ((1, (0, 0, 0), lit), (2, red, set(range(61))), (3, red, pass_lit)):
+            b.uc.mem_write(opts_addr, (opts | mode << 9).to_bytes(2, "little"))
+            b.uc.mem_write(syms["layer_mask"], (1 << 1).to_bytes(2, "little"))
+            tick += 40
+            frame(tick)
+            want = [blue if i in on else rest for i in range(61)]
+            assert leds() == want, f"mode {mode}: {bad(leds(), want)}"
+            b.uc.mem_write(syms["layer_mask"], b"\0\0")
+            tick += 40
+            frame(tick)
+            assert leds() == [red] * 61, f"mode {mode}: effect not back {bad(leds(), [red] * 61)}"
+        assert len(pass_lit) > len(lit), "no transparent keys to pass through"
+        keymap2 = keymap[2]
+        lit2 = {key_leds[k] for k, kc in enumerate(keymap2) if kc not in ("KC_TRNS", "KC_NO")}
+        b.uc.mem_write(opts_addr, (opts | 1 << 9).to_bytes(2, "little"))
+        b.uc.mem_write(syms["layer_mask"], (1 << 2).to_bytes(2, "little"))
+        tick += 40
+        frame(tick)
+        want = [hsv(43, 255, 200) if i in lit2 else (0, 0, 0) for i in range(61)]
+        assert leds() == want, f"layer 2 in its colour: {bad(leds(), want)}"
+        b.uc.mem_write(opts_addr, opts.to_bytes(2, "little"))
+        b.uc.mem_write(syms["layer_mask"], b"\0\0")
+        tick += 40
+        frame(tick)
         print(f"11c layer indicator: layer 1's {len(lit)} bound keys blue over the effect, the rest "
-              "unchanged, effect back when the layer goes off, off with option bit 8, colour set / read back")
+              "unchanged, effect back when the layer goes off, off with option bit 8, colour set / read back; "
+              f"modes off / whole board / pass-through ({len(pass_lit)} keys), layer 2 in its own colour")
     else:
         print("11c layer indicator: not in this build")
 else:

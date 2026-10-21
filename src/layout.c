@@ -150,6 +150,10 @@ static uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key) {
   return CURRENT_PROFILE.keymap[default_layer][key];
 }
 
+uint8_t layout_current_keycode(uint8_t key) {
+  return layout_get_keycode(layout_get_current_layer(), key);
+}
+
 /**
  * @brief Swap W/A/S/D with the arrow keys when the stock WASD switch is on
  *

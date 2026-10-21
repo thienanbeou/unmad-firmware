@@ -5,10 +5,10 @@ usage: python check_migration_emu.py OLD.elf NEW.elf   (raw.bin next to each)
 Boots the old build on blank flash (it writes its default configuration to
 sector 11), copies sector 11 into the new build and boots it. The new build
 must migrate instead of resetting: global settings and every profile byte kept,
-version bumped to v1.10, the lighting block filled in (the old block kept or
+version bumped to v1.11, the lighting block filled in (the old block kept or
 the config.h defaults, `hue_range` 255, the Caps Lock colour, the white balance
-and the layer indicator colour appended), magic numbers intact, and the result
-written back to sector 11. OLD may be a v1.5 to v1.9 build.
+and the layer indicator colours appended), magic numbers intact, and the result
+written back to sector 11. OLD may be a v1.5 to v1.10 build.
 """
 import re
 import struct
@@ -45,14 +45,14 @@ sector = bytes(old.uc.mem_read(SECTOR11, SECTOR_SIZE))
 old_cfg = config(old)
 magic_start = old_cfg[:4]
 old_version = struct.unpack_from("<H", old_cfg, 4)[0]
-assert old_version in (0x0105, 0x0106, 0x0107, 0x0108, 0x0109), f"old build stores version {old_version:#x}"
+assert old_version in (0x0105, 0x0106, 0x0107, 0x0108, 0x0109, 0x010A), f"old build stores version {old_version:#x}"
 old_end = old_cfg.index(MAGIC_END)
 
 new = boot(NEW, sector)
 new_cfg = config(new)
 assert new_cfg[:4] == magic_start, "magic_start"
 new_version = struct.unpack_from("<H", new_cfg, 4)[0]
-assert new_version == 0x010A, f"new build did not migrate (version {new_version:#x})"
+assert new_version == 0x010B, f"new build did not migrate (version {new_version:#x})"
 new_end = new_cfg.index(MAGIC_END)
 
 GLOBAL_V15 = 14 + NUM_KEYS * 2                    # MIGRATION_V1_5_GLOBAL_CONFIG_SIZE
@@ -60,8 +60,9 @@ RGB_V16 = 5 + NUM_KEYS * 3
 RGB_V17 = RGB_V16 + 1                              # + hue_range (v1.7)
 RGB_V18 = RGB_V17 + 3                              # + Caps Lock hue, sat, val (v1.8)
 RGB_V19 = RGB_V18 + 3                              # + white balance R, G, B (v1.9)
-RGB_SIZE = RGB_V19 + 3                             # + layer indicator hue, sat, val (v1.10)
-OLD_RGB = {0x0105: 0, 0x0106: RGB_V16, 0x0107: RGB_V17, 0x0108: RGB_V18, 0x0109: RGB_V19}[old_version]
+RGB_V110 = RGB_V19 + 3                             # + layer 1 indicator hue, sat, val (v1.10)
+RGB_SIZE = RGB_V110 + 6                            # + layers 2, 3 indicator colours (v1.11)
+OLD_RGB = {0x0105: 0, 0x0106: RGB_V16, 0x0107: RGB_V17, 0x0108: RGB_V18, 0x0109: RGB_V19, 0x010A: RGB_V110}[old_version]
 assert new_end - old_end == RGB_SIZE - OLD_RGB, f"size grew by {new_end - old_end}"
 # Global block (magic, version aside), then the profiles, byte for byte
 assert new_cfg[6:GLOBAL_V15] == old_cfg[6:GLOBAL_V15], "global settings changed"
@@ -82,14 +83,15 @@ if old_version < 0x0108:
     assert list(rgb[RGB_V17:RGB_V18]) == caps, f"Caps Lock colour {list(rgb[RGB_V17:RGB_V18])}"
 if old_version < 0x0109:
     assert list(rgb[RGB_V18:RGB_V19]) == [255, 255, 255], f"white balance {list(rgb[RGB_V18:RGB_V19])}"
-layer = [170, 255, int(cfg["RGB_DEFAULT_VAL"])]
-assert list(rgb[RGB_V19:]) == layer, f"layer indicator colour {list(rgb[RGB_V19:])}"
+val = int(cfg["RGB_DEFAULT_VAL"])
+layer = [170, 255, val, 85, 255, val, 0, 255, val]   # blue, green, red
+assert list(rgb[RGB_V19:]) == layer, f"layer indicator colours {list(rgb[RGB_V19:])}"
 writes = [a for a in new.flash_writes if SECTOR11 <= a < SECTOR11 + SECTOR_SIZE]
 assert writes, "migration not written to flash"
 assert all(a >= SECTOR11 for a in new.flash_writes), "flash write below sector 11"
-print(f"migration v{old_version >> 8}.{old_version & 255} -> v1.10: {old_end} -> {new_end} bytes, global settings and "
+print(f"migration v{old_version >> 8}.{old_version & 255} -> v1.11: {old_end} -> {new_end} bytes, global settings and "
       f"{new_end - GLOBAL_V15 - RGB_SIZE} profile bytes unchanged, lighting "
-      f"{'kept' if OLD_RGB else want} + Caps Lock colour + white balance + layer colour {layer}, {len(writes)} flash writes in sector 11")
+      f"{'kept' if OLD_RGB else want} + Caps Lock colour + white balance + layer colours {layer}, {len(writes)} flash writes in sector 11")
 
 # Booting the migrated flash again must not migrate or reset a second time
 again = boot(NEW, bytes(new.uc.mem_read(SECTOR11, SECTOR_SIZE)))

@@ -216,8 +216,12 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   applies to the next key; held: like MO / the plain modifier), and Tri
   Layer Lower / Upper (MO(1) / MO(2), both held: layer 3). A layer indicator
   lights the keys that do something on the active layer (any layer but 0)
-  in its own colour (blue by default, commands 0xEB / 0xEC; option bit 8
-  turns it off).
+  in that layer's colour (from v1.3 one per layer: blue, green, red by
+  default; commands 0xEB / 0xEC; option bit 8 turns it off). From v1.3 it
+  has four modes for the other keys (option bits 9-10): keep the effect, go
+  dark, light the whole board in the layer colour (QMK's two examples), or
+  pass-through (transparent keys light too when the layer below gives them
+  a key).
 - Tap dance is an advanced key type of this fork (not in upstream libhmk);
   edit it in the Unmad configurator. Upstream hmkconf (hmkconf.com) lists tap
   dances as "?" and corrupts them on save, and it clears the switches above

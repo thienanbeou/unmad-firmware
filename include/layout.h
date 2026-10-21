@@ -53,6 +53,15 @@ void layout_task(void);
 uint8_t layout_current_layer(void);
 
 /**
+ * @brief Keycode a key has now, through transparent keys to the layers below
+ *
+ * @param key Key index
+ *
+ * @return Keycode
+ */
+uint8_t layout_current_keycode(uint8_t key);
+
+/**
  * @brief Manually register a key press
  *
  * @param key Key code

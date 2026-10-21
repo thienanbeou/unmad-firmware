@@ -25,6 +25,7 @@
 #include "layout.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
+#include "tusb.h"
 
 #include <stdlib.h>
 
@@ -1084,6 +1085,27 @@ void rgb_task(void) {
     started = true;
   }
 
+  // Lights off while the host is off or asleep (not configured, or the bus
+  // suspended: a powered-off laptop often keeps the port powered), as QMK
+  // RGB_MATRIX_SLEEP does. Keys still scan, so a press wakes a sleeping host.
+  // Back on, the kept frame is repainted (some effects paint only a few LEDs
+  // per frame).
+  static bool dark = false;
+  if (!tud_mounted() || tud_suspended()) {
+    if (!dark) {
+      dark = true;
+      for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+        rgb_driver_set(i, 0, 0, 0);
+    }
+    rgb_driver_flush();
+    return;
+  }
+  if (dark) {
+    dark = false;
+    for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+      led_write(i, frame[i]);
+  }
+
   // Key presses feed the reactive effects and the typing heatmap. Looked at
   // once per millisecond (no press is shorter), not on every main loop pass,
   // where the 61 keys cost about 15% of the loop.
@@ -1113,19 +1135,32 @@ void rgb_task(void) {
 
   // Indicators of this frame, each in its own colour and brightness (also
   // with the lighting off). Layer: while a layer other than 0 is on, its keys
-  // that do something (not transparent, not "no key", or an advanced key).
+  // that do something (not transparent, not "no key", or an advanced key) in
+  // the layer's colour; the mode says what the other keys show.
   const eeconfig_rgb_t *cfg = &eeconfig->rgb;
   static rgb_t shown[RGB_NUM_LEDS];
+  // LEDs in an indicator colour (`shown`); `cover` adds the ones the layer
+  // indicator darkens
+  bitmap_t lit[M_DIV_CEIL(RGB_NUM_LEDS, 32)] = {0};
   bitmap_t cover[M_DIV_CEIL(RGB_NUM_LEDS, 32)] = {0};
   const uint8_t layer = layout_current_layer();
-  if (!eeconfig->options.layer_indicator_disabled && layer != 0) {
-    const rgb_t c = hsv_to_rgb((hsv_t){
-        cfg->layer_hue, cfg->layer_sat,
-        M_MIN(cfg->layer_val, RGB_MAX_BRIGHTNESS)});
+  const uint8_t mode = eeconfig->options.layer_indicator_mode;
+  const bool layer_on = !eeconfig->options.layer_indicator_disabled && layer != 0;
+  if (layer_on) {
+    const uint8_t *hsv = cfg->layer_hsv[layer - 1];
+    const rgb_t c = hsv_to_rgb(
+        (hsv_t){hsv[0], hsv[1], M_MIN(hsv[2], RGB_MAX_BRIGHTNESS)});
+    if (mode == LAYER_INDICATOR_WHOLE_BOARD)
+      for (uint8_t i = 0; i < RGB_NUM_LEDS; i++) {
+        bitmap_set(lit, i, true);
+        shown[i] = c;
+      }
     for (uint8_t k = 0; k < NUM_KEYS; k++) {
-      const uint8_t kc = CURRENT_PROFILE.keymap[layer][k];
+      uint8_t kc = CURRENT_PROFILE.keymap[layer][k];
+      if (kc == KC_TRANSPARENT && mode == LAYER_INDICATOR_PASS_THROUGH)
+        kc = layout_current_keycode(k);
       if (kc != KC_TRANSPARENT && kc != KC_NO && key_leds[k] != RGB_NO_LED) {
-        bitmap_set(cover, key_leds[k], true);
+        bitmap_set(lit, key_leds[k], true);
         shown[key_leds[k]] = c;
       }
     }
@@ -1134,18 +1169,21 @@ void rgb_task(void) {
       if (ak->type == AK_TYPE_NONE || ak->layer != layer ||
           ak->key >= NUM_KEYS || key_leds[ak->key] == RGB_NO_LED)
         continue;
-      bitmap_set(cover, key_leds[ak->key], true);
+      bitmap_set(lit, key_leds[ak->key], true);
       shown[key_leds[ak->key]] = c;
     }
   }
 #if defined(RGB_CAPS_LOCK_KEY)
   if (!eeconfig->options.caps_indicator_disabled &&
       (hid_get_led_state() & 0x02)) {
-    bitmap_set(cover, key_leds[RGB_CAPS_LOCK_KEY], true);
+    bitmap_set(lit, key_leds[RGB_CAPS_LOCK_KEY], true);
     shown[key_leds[RGB_CAPS_LOCK_KEY]] = hsv_to_rgb((hsv_t){
         cfg->caps_hue, cfg->caps_sat, M_MIN(cfg->caps_val, RGB_MAX_BRIGHTNESS)});
   }
 #endif
+  const bool rest_covered = layer_on && mode == LAYER_INDICATOR_OFF;
+  for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
+    bitmap_set(cover, i, rest_covered || bitmap_get(lit, i));
 
   // LEDs no longer covered get the effect back, then the effect renders
   // (covered LEDs only into `frame`), then the indicators go on top
@@ -1157,7 +1195,7 @@ void rgb_task(void) {
   rgb_render(init);
   for (uint8_t i = 0; i < RGB_NUM_LEDS; i++)
     if (bitmap_get(covered, i))
-      led_write(i, shown[i]);
+      led_write(i, bitmap_get(lit, i) ? shown[i] : (rgb_t){0, 0, 0});
 }
 
 //--------------------------------------------------------------------+
@@ -1232,16 +1270,23 @@ bool rgb_command(const uint8_t *in, uint8_t *out) {
   case COMMAND_SET_RGB_WHITE_BALANCE:
     // R, G, B gain
     return EECONFIG_WRITE_N(rgb.white_balance, &in[1], 3);
-  case COMMAND_GET_RGB_LAYER:
-    // Layer indicator hue, sat, val
-    out[1] = eeconfig->rgb.layer_hue;
-    out[2] = eeconfig->rgb.layer_sat;
-    out[3] = eeconfig->rgb.layer_val;
+  case COMMAND_GET_RGB_LAYER: {
+    // in: layer (0 = layer 1, as v1.2 configurators send); out: its layer
+    // indicator hue, sat, val. A layer out of range fails, which tells a
+    // configurator this firmware has a colour per layer (v1.2 ignores it).
+    const uint8_t layer = M_MAX(in[1], 1);
+    if (layer >= NUM_LAYERS)
+      return false;
+    memcpy(&out[1], eeconfig->rgb.layer_hsv[layer - 1], 3);
     return true;
+  }
   case COMMAND_SET_RGB_LAYER: {
-    // hue, sat, val (capped at the maximum brightness)
-    const uint8_t layer[3] = {in[1], in[2], M_MIN(in[3], RGB_MAX_BRIGHTNESS)};
-    return EECONFIG_WRITE_N(rgb.layer_hue, layer, sizeof(layer));
+    // hue, sat, val (capped at the maximum brightness), layer (0 = layer 1)
+    const uint8_t layer = M_MAX(in[4], 1);
+    if (layer >= NUM_LAYERS)
+      return false;
+    const uint8_t hsv[3] = {in[1], in[2], M_MIN(in[3], RGB_MAX_BRIGHTNESS)};
+    return EECONFIG_WRITE_N(rgb.layer_hsv[layer - 1], hsv, sizeof(hsv));
   }
   default:
     return false;
