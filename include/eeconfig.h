@@ -195,7 +195,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x010B
+#define EECONFIG_VERSION 0x010C
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -222,9 +222,14 @@ typedef struct __attribute__((packed)) {
 #if defined(RGB_NUM_LEDS)
   // Lighting configuration (added in v1.6 of this fork, hue_range in v1.7,
   // the Caps Lock colour in v1.8, the white balance in v1.9, the layer
-  // indicator colour in v1.10)
+  // indicator colour in v1.10, one per layer in v1.11)
   eeconfig_rgb_t rgb;
 #endif
+  // Profiles and layers in use (v1.12 of this fork): there is room for
+  // NUM_PROFILES x NUM_LAYERS, the configurator shows these many and adds
+  // more; profile keys stay within them
+  uint8_t active_profiles;
+  uint8_t active_layers;
   // End of global configurations
 
   // Profiles
@@ -259,8 +264,16 @@ extern const eeconfig_t *eeconfig;
   }
 #endif
 
-#if !defined(DEFAULT_KEYMAPS)
+#if !defined(DEFAULT_KEYMAPS) && !defined(DEFAULT_KEYMAP)
 #error "DEFAULT_KEYMAPS is not defined"
+#endif
+
+#if !defined(DEFAULT_ACTIVE_PROFILES)
+#define DEFAULT_ACTIVE_PROFILES NUM_PROFILES
+#endif
+
+#if !defined(DEFAULT_ACTIVE_LAYERS)
+#define DEFAULT_ACTIVE_LAYERS NUM_LAYERS
 #endif
 
 #if defined(RGB_NUM_LEDS) && !defined(DEFAULT_RGB)
@@ -336,6 +349,15 @@ bool eeconfig_reset(void);
  * @return true if successful, false otherwise
  */
 bool eeconfig_reset_profile(uint8_t profile);
+
+/**
+ * @brief Default values of a profile
+ *
+ * @param profile Profile index (< NUM_PROFILES)
+ *
+ * @return The profile's defaults, valid until the next call
+ */
+const eeconfig_profile_t *eeconfig_default_profile(uint8_t profile);
 
 /**
  * @brief Write a value to a field in the persistent configuration

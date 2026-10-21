@@ -386,7 +386,7 @@ void layout_task(void) {
  * @return true if successful, false otherwise
  */
 static bool layout_set_profile(uint8_t profile) {
-  if (profile >= NUM_PROFILES)
+  if (profile >= eeconfig->active_profiles)
     return false;
 
   advanced_key_clear();
@@ -396,6 +396,19 @@ static bool layout_set_profile(uint8_t profile) {
   layout_load_advanced_keys();
 
   return status;
+}
+
+bool layout_set_in_use(uint8_t profiles, uint8_t layers) {
+  if (profiles < 1 || profiles > NUM_PROFILES || layers < 1 ||
+      layers > NUM_LAYERS)
+    return false;
+
+  const uint8_t in_use[2] = {profiles, layers};
+  if (!EECONFIG_WRITE_N(active_profiles, in_use, sizeof(in_use)))
+    return false;
+  if (eeconfig->current_profile >= profiles)
+    return layout_set_profile(0);
+  return true;
 }
 
 void layout_register(uint8_t key, uint8_t keycode) {
@@ -470,7 +483,8 @@ void layout_register(uint8_t key, uint8_t keycode) {
     break;
 
   case SP_PROFILE_NEXT:
-    layout_set_profile((eeconfig->current_profile + 1) % NUM_PROFILES);
+    layout_set_profile((eeconfig->current_profile + 1) %
+                       eeconfig->active_profiles);
     break;
 
   case SP_BOOT:

@@ -26,8 +26,13 @@ static eeconfig_calibration_t default_calibration = DEFAULT_CALIBRATION;
 #if defined(RGB_NUM_LEDS)
 static const eeconfig_rgb_t default_rgb = DEFAULT_RGB;
 #endif
+#if defined(DEFAULT_KEYMAP)
+// The same keymap for every profile
+static const uint8_t default_keymap[NUM_LAYERS][NUM_KEYS] = DEFAULT_KEYMAP;
+#else
 static const uint8_t default_keymaps[NUM_PROFILES][NUM_LAYERS][NUM_KEYS] =
     DEFAULT_KEYMAPS;
+#endif
 static const macro_node_t default_macro = {
     .keycode = KC_NO,
     .action = MACRO_ACTION_NONE,
@@ -51,12 +56,14 @@ _Static_assert(M_ARRAY_SIZE(default_advanced_keys) <= NUM_ADVANCED_KEYS,
                "Too many default advanced keys");
 #endif
 
-static bool eeconfig_write_default_profile(uint8_t profile) {
-  if (profile >= NUM_PROFILES)
-    return false;
-
+const eeconfig_profile_t *eeconfig_default_profile(uint8_t profile) {
+#if defined(DEFAULT_KEYMAP)
+  (void)profile;
+  memcpy(default_profile.keymap, default_keymap, sizeof(default_profile.keymap));
+#else
   memcpy(default_profile.keymap, default_keymaps[profile],
          sizeof(default_profile.keymap));
+#endif
   for (uint32_t i = 0; i < NUM_MACRO_NODES; i++)
     default_profile.macros[i] = default_macro;
 #if defined(DEFAULT_MACRO_NODES)
@@ -67,7 +74,14 @@ static bool eeconfig_write_default_profile(uint8_t profile) {
   memcpy(default_profile.advanced_keys, default_advanced_keys,
          sizeof(default_advanced_keys));
 #endif
-  return EECONFIG_WRITE(profiles[profile], &default_profile);
+  return &default_profile;
+}
+
+static bool eeconfig_write_default_profile(uint8_t profile) {
+  if (profile >= NUM_PROFILES)
+    return false;
+
+  return EECONFIG_WRITE(profiles[profile], eeconfig_default_profile(profile));
 }
 
 static bool eeconfig_is_latest_version(void) {
@@ -119,6 +133,8 @@ bool eeconfig_reset(void) {
 #if defined(RGB_NUM_LEDS)
   status &= EECONFIG_WRITE(rgb, &default_rgb);
 #endif
+  EECONFIG_WRITE_LOCAL(active_profiles, DEFAULT_ACTIVE_PROFILES);
+  EECONFIG_WRITE_LOCAL(active_layers, DEFAULT_ACTIVE_LAYERS);
   for (uint32_t i = 0; i < NUM_PROFILES; i++)
     status &= eeconfig_write_default_profile(i);
   EECONFIG_WRITE_LOCAL(magic_end, EECONFIG_MAGIC_END);

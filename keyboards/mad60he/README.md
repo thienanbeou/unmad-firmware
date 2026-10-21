@@ -222,6 +222,14 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
   dark, light the whole board in the layer colour (QMK's two examples), or
   pass-through (transparent keys light too when the layer below gives them
   a key).
+- Profiles and layers (v1.4): room for 8 profiles x 8 layers, with 40
+  advanced keys and 160 macro steps per profile (v1.3: 4 x 4, 32 and 128).
+  4 profiles and 6 layers are in use at first; the configurator's "+" next
+  to the layer buttons and "Add Profile" add more, up to 8 each (commands
+  0xED / 0xEE). 8 is the ceiling because the layer and profile keys (MO, TO,
+  DF, OSL, PF) have 8 codes each. Upgrading from v1.3 or older keeps every
+  setting (the settings area grows from 8 to 16 KB; the old one is read
+  once).
 - Tap dance is an advanced key type of this fork (not in upstream libhmk);
   edit it in the Unmad configurator. Upstream hmkconf (hmkconf.com) lists tap
   dances as "?" and corrupts them on save, and it clears the switches above

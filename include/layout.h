@@ -62,6 +62,16 @@ uint8_t layout_current_layer(void);
 uint8_t layout_current_keycode(uint8_t key);
 
 /**
+ * @brief Set the profiles and layers in use
+ *
+ * @param profiles 1 to NUM_PROFILES
+ * @param layers 1 to NUM_LAYERS
+ *
+ * @return true if successful, false otherwise
+ */
+bool layout_set_in_use(uint8_t profiles, uint8_t layers);
+
+/**
  * @brief Manually register a key press
  *
  * @param key Key code

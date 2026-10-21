@@ -76,6 +76,27 @@
 // (option bit caps_indicator_disabled).
 #define RGB_CAPS_LOCK_KEY 28
 
+// Layer indicator colours, layers 1 to 7: blue, green, red, yellow, cyan,
+// magenta, orange
+#define RGB_DEFAULT_LAYER_HSV                                                  \
+  {{170, 255, RGB_DEFAULT_VAL}, {85, 255, RGB_DEFAULT_VAL},                    \
+   {0, 255, RGB_DEFAULT_VAL},   {43, 255, RGB_DEFAULT_VAL},                    \
+   {128, 255, RGB_DEFAULT_VAL}, {213, 255, RGB_DEFAULT_VAL},                   \
+   {21, 255, RGB_DEFAULT_VAL}}
+
+// v1.4: room for 8 profiles x 8 layers (keyboard.json), of which 4 profiles
+// and 6 layers are in use at first; the configurator adds more up to 8.
+#define DEFAULT_ACTIVE_PROFILES 4
+#define DEFAULT_ACTIVE_LAYERS 6
+// Builds up to v1.3 (settings v1.11 and older) had 4 profiles x 4 layers, 32
+// advanced keys and 128 macro nodes in an 8 KB settings area; the migration
+// and the wear leveling read those once and move them over
+#define MIGRATION_OLD_NUM_PROFILES 4
+#define MIGRATION_OLD_NUM_LAYERS 4
+#define MIGRATION_OLD_NUM_ADVANCED_KEYS 32
+#define MIGRATION_OLD_NUM_MACRO_NODES 128
+#define WL_LEGACY_VIRTUAL_SIZE 8192
+
 // Bootmagic Lite (v1.1): hold Esc (key 0) while plugging in -> bootloader.
 // Checked after the rest calibration on the filtered ADC level, since a key
 // held at power-up calibrates as its own rest. Inverted 12-bit values here:

@@ -470,6 +470,15 @@ static void command_process(void) {
                              &p->gamepad_options);
     break;
   }
+  case COMMAND_GET_IN_USE: {
+    out_buf[1] = eeconfig->active_profiles;
+    out_buf[2] = eeconfig->active_layers;
+    break;
+  }
+  case COMMAND_SET_IN_USE: {
+    success = layout_set_in_use(in_buf[1], in_buf[2]);
+    break;
+  }
 #if defined(RGB_NUM_LEDS)
   case COMMAND_GET_RGB:
   case COMMAND_SET_RGB:

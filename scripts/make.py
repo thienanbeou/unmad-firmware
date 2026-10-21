@@ -156,7 +156,12 @@ build_flags.define("NUM_MACRO_NODES", kb.num_macro_nodes)
 
 # Default Keymaps (per profile)
 default_keymaps = utils.resolve_default_keymaps(kb_json)
-build_flags.define("DEFAULT_KEYMAPS", utils.to_c_array(default_keymaps))
+if all(k == default_keymaps[0] for k in default_keymaps):
+    # One keymap for every profile: defined once, so 8 profiles x 8 layers stay
+    # under the Windows command line limit (32 KB)
+    build_flags.define("DEFAULT_KEYMAP", utils.to_c_array(default_keymaps[0]))
+else:
+    build_flags.define("DEFAULT_KEYMAPS", utils.to_c_array(default_keymaps))
 
 # Default macros and advanced keys
 if kb_json.advanced_keys:

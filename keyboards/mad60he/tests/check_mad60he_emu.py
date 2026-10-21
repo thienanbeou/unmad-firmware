@@ -554,7 +554,9 @@ if "rgb_slots" in syms:
         assert ok and list(out[1:4]) == [85, 255, int(cfg["RGB_DEFAULT_VAL"])], f"layer 2 default {list(out[1:4])}"
         ok, out = command(0xEB, 3)
         assert ok and list(out[1:4]) == [0, 255, int(cfg["RGB_DEFAULT_VAL"])], f"layer 3 default {list(out[1:4])}"
-        assert not command(0xEB, 4)[0] and not command(0xEC, 0, 0, 0, 4)[0], "layer 4 accepted"
+        ok, out = command(0xEB, 4)
+        assert ok and list(out[1:4]) == [43, 255, int(cfg["RGB_DEFAULT_VAL"])], f"layer 4 default {list(out[1:4])}"
+        assert not command(0xEB, 8)[0] and not command(0xEC, 0, 0, 0, 8)[0], "layer 8 accepted"
         ok, _ = command(0xEC, 43, 255, 200, 2)
         ok2, out = command(0xEB, 2)
         assert ok and list(out[1:4]) == [43, 255, 200], "SET_RGB_LAYER layer 2"

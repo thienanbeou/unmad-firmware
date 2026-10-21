@@ -18,11 +18,27 @@
 #include "eeconfig.h"
 #include "wear_leveling.h"
 
+// Counts of the builds before settings v1.12. A board that changed them in
+// v1.12 sets the old ones in its config.h; every migration up to v1.11 works
+// on these, v1.12 moves the settings to the current counts.
+#if !defined(MIGRATION_OLD_NUM_PROFILES)
+#define MIGRATION_OLD_NUM_PROFILES NUM_PROFILES
+#endif
+#if !defined(MIGRATION_OLD_NUM_LAYERS)
+#define MIGRATION_OLD_NUM_LAYERS NUM_LAYERS
+#endif
+#if !defined(MIGRATION_OLD_NUM_ADVANCED_KEYS)
+#define MIGRATION_OLD_NUM_ADVANCED_KEYS NUM_ADVANCED_KEYS
+#endif
+#if !defined(MIGRATION_OLD_NUM_MACRO_NODES)
+#define MIGRATION_OLD_NUM_MACRO_NODES NUM_MACRO_NODES
+#endif
+
 #define MIGRATION_V1_0_GLOBAL_CONFIG_SIZE 12
 #define MIGRATION_V1_0_ADVANCED_KEY_SIZE 12
 #define MIGRATION_V1_0_PROFILE_CONFIG_SIZE                                     \
-  (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                      \
-   NUM_ADVANCED_KEYS * MIGRATION_V1_0_ADVANCED_KEY_SIZE + 1)
+  (MIGRATION_OLD_NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                      \
+   MIGRATION_OLD_NUM_ADVANCED_KEYS * MIGRATION_V1_0_ADVANCED_KEY_SIZE + 1)
 
 static bool v1_1_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_1_profile_config_func(uint8_t profile, uint8_t *dst,
@@ -30,8 +46,8 @@ static bool v1_1_profile_config_func(uint8_t profile, uint8_t *dst,
 
 #define MIGRATION_V1_1_GLOBAL_CONFIG_SIZE 14
 #define MIGRATION_V1_1_PROFILE_CONFIG_SIZE                                     \
-  (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                      \
-   NUM_ADVANCED_KEYS * MIGRATION_V1_0_ADVANCED_KEY_SIZE + NUM_KEYS + 9 + 1)
+  (MIGRATION_OLD_NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                      \
+   MIGRATION_OLD_NUM_ADVANCED_KEYS * MIGRATION_V1_0_ADVANCED_KEY_SIZE + NUM_KEYS + 9 + 1)
 
 static bool v1_2_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_2_profile_config_func(uint8_t profile, uint8_t *dst,
@@ -64,9 +80,9 @@ static bool v1_5_profile_config_func(uint8_t profile, uint8_t *dst,
 #define MIGRATION_V1_5_MACRO_NODE_SIZE 4
 #define MIGRATION_V1_5_MACRO_NODE_NONE UINT8_MAX
 #define MIGRATION_V1_5_PROFILE_CONFIG_SIZE                                     \
-  (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                      \
-   NUM_ADVANCED_KEYS * MIGRATION_V1_5_ADVANCED_KEY_SIZE +                      \
-   NUM_MACRO_NODES * MIGRATION_V1_5_MACRO_NODE_SIZE + NUM_KEYS + 9 + 1)
+  (MIGRATION_OLD_NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                      \
+   MIGRATION_OLD_NUM_ADVANCED_KEYS * MIGRATION_V1_5_ADVANCED_KEY_SIZE +                      \
+   MIGRATION_OLD_NUM_MACRO_NODES * MIGRATION_V1_5_MACRO_NODE_SIZE + NUM_KEYS + 9 + 1)
 
 static bool v1_6_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_6_profile_config_func(uint8_t profile, uint8_t *dst,
@@ -141,12 +157,27 @@ static bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
 
 #if defined(RGB_NUM_LEDS)
 // `layer_hsv` of layers 2 and up
-#define MIGRATION_V1_11_RGB_CONFIG_SIZE                                          (MIGRATION_V1_10_RGB_CONFIG_SIZE + (NUM_LAYERS - 2) * 3)
+#define MIGRATION_V1_11_RGB_CONFIG_SIZE                                          (MIGRATION_V1_10_RGB_CONFIG_SIZE + (MIGRATION_OLD_NUM_LAYERS - 2) * 3)
 #else
 #define MIGRATION_V1_11_RGB_CONFIG_SIZE 0
 #endif
 #define MIGRATION_V1_11_GLOBAL_CONFIG_SIZE                                       (MIGRATION_V1_5_GLOBAL_CONFIG_SIZE + MIGRATION_V1_11_RGB_CONFIG_SIZE)
 #define MIGRATION_V1_11_PROFILE_CONFIG_SIZE MIGRATION_V1_10_PROFILE_CONFIG_SIZE
+
+static bool v1_12_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+
+#if defined(RGB_NUM_LEDS)
+// `layer_hsv` of the new layers
+#define MIGRATION_V1_12_RGB_CONFIG_SIZE                                          (MIGRATION_V1_11_RGB_CONFIG_SIZE +                                              (NUM_LAYERS - MIGRATION_OLD_NUM_LAYERS) * 3)
+#else
+#define MIGRATION_V1_12_RGB_CONFIG_SIZE 0
+#endif
+// + `active_profiles`, `active_layers`
+#define MIGRATION_V1_12_GLOBAL_CONFIG_SIZE                                       (MIGRATION_V1_5_GLOBAL_CONFIG_SIZE + MIGRATION_V1_12_RGB_CONFIG_SIZE + 2)
+// The v1.5 profile layout at the current counts
+#define MIGRATION_V1_12_PROFILE_CONFIG_SIZE                                      (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                         NUM_ADVANCED_KEYS * MIGRATION_V1_5_ADVANCED_KEY_SIZE +                         NUM_MACRO_NODES * MIGRATION_V1_5_MACRO_NODE_SIZE + NUM_KEYS + 9 + 1)
 
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
@@ -233,13 +264,20 @@ static const migration_t migrations[] = {
         .global_config_func = v1_11_global_config_func,
         .profile_config_func = v1_11_profile_config_func,
     },
+    {
+        .version = 0x010C,
+        .global_config_size = MIGRATION_V1_12_GLOBAL_CONFIG_SIZE,
+        .profile_config_size = MIGRATION_V1_12_PROFILE_CONFIG_SIZE,
+        .global_config_func = v1_12_global_config_func,
+        .profile_config_func = v1_12_profile_config_func,
+    },
 };
 
 // An assertion to remind us to bump the persistent configuration version, and
 // implement a migration function if there is a change to the configuration
 // type. Update the assertion when a new version is added.
-_Static_assert(MIGRATION_V1_11_GLOBAL_CONFIG_SIZE +
-                       NUM_PROFILES * MIGRATION_V1_11_PROFILE_CONFIG_SIZE ==
+_Static_assert(MIGRATION_V1_12_GLOBAL_CONFIG_SIZE +
+                       NUM_PROFILES * MIGRATION_V1_12_PROFILE_CONFIG_SIZE ==
                    offsetof(eeconfig_t, magic_end),
                "Invalid configuration size");
 
@@ -277,7 +315,11 @@ bool migration_try_migrate(void) {
       return false;
 
     if (m->profile_config_func) {
-      for (uint8_t p = 0; p < NUM_PROFILES; p++) {
+      // v1.12 writes every current profile; the ones past the old count read
+      // nothing from `src`
+      const uint8_t num_profiles =
+          m->version >= 0x010C ? NUM_PROFILES : MIGRATION_OLD_NUM_PROFILES;
+      for (uint8_t p = 0; p < num_profiles; p++) {
         // Move the pointers to the start of each profile configuration
         const uint8_t *profile_src =
             src + prev_m->global_config_size + p * prev_m->profile_config_size;
@@ -350,9 +392,9 @@ bool v1_1_profile_config_func(uint8_t profile, uint8_t *dst,
   // Save the `keymap` offset
   uint8_t *keymap = dst;
   // Copy `keymap` to `actuation_map`
-  migration_memcpy(&dst, &src, (NUM_LAYERS * NUM_KEYS) + (NUM_KEYS * 4));
+  migration_memcpy(&dst, &src, (MIGRATION_OLD_NUM_LAYERS * NUM_KEYS) + (NUM_KEYS * 4));
   // Update keycodes to include `KC_INT1` ... `KC_LNG6`
-  for (uint32_t i = 0; i < NUM_LAYERS * NUM_KEYS; i++) {
+  for (uint32_t i = 0; i < MIGRATION_OLD_NUM_LAYERS * NUM_KEYS; i++) {
     if (0x70 <= keymap[i] && keymap[i] <= 0x71)
       // `KC_LNG1` and `KC_LNG2`
       keymap[i] += 0x06;
@@ -364,9 +406,9 @@ bool v1_1_profile_config_func(uint8_t profile, uint8_t *dst,
   uint8_t *advanced_keys = dst;
   // Copy `advanced_keys`
   migration_memcpy(&dst, &src,
-                   NUM_ADVANCED_KEYS * MIGRATION_V1_0_ADVANCED_KEY_SIZE);
+                   MIGRATION_OLD_NUM_ADVANCED_KEYS * MIGRATION_V1_0_ADVANCED_KEY_SIZE);
   // Default `hold_on_other_key_press` to 0
-  for (uint8_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+  for (uint8_t i = 0; i < MIGRATION_OLD_NUM_ADVANCED_KEYS; i++) {
     uint8_t *ak = advanced_keys + i * MIGRATION_V1_0_ADVANCED_KEY_SIZE;
     if (ak[2] == AK_TYPE_TAP_HOLD)
       ak[7] = 0;
@@ -491,11 +533,11 @@ bool v1_5_profile_config_func(uint8_t profile, uint8_t *dst,
   (void)profile;
 
   // Copy `keymap` to `actuation_map`.
-  migration_memcpy(&dst, &src, NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4);
+  migration_memcpy(&dst, &src, MIGRATION_OLD_NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4);
 
   // Expand each advanced key record from 12 bytes to the current size and
   // clear the newly-added Dynamic Keystroke slots.
-  for (uint8_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+  for (uint8_t i = 0; i < MIGRATION_OLD_NUM_ADVANCED_KEYS; i++) {
     migration_memcpy(&dst, &src, MIGRATION_V1_0_ADVANCED_KEY_SIZE);
     migration_memset(&dst, 0,
                      MIGRATION_V1_5_ADVANCED_KEY_SIZE -
@@ -503,7 +545,7 @@ bool v1_5_profile_config_func(uint8_t profile, uint8_t *dst,
   }
 
   // Clear the new per-profile macro buffer.
-  for (uint32_t i = 0; i < NUM_MACRO_NODES; i++) {
+  for (uint32_t i = 0; i < MIGRATION_OLD_NUM_MACRO_NODES; i++) {
     migration_memset(&dst, 0, 3);
     migration_assign_uint8_t(&dst, MIGRATION_V1_5_MACRO_NODE_NONE);
   }
@@ -679,7 +721,7 @@ bool v1_11_global_config_func(uint8_t *dst, const uint8_t *src) {
 #if defined(RGB_NUM_LEDS)
   // Layers 2 and up: the default colours
   const uint8_t hsv[NUM_LAYERS - 1][3] = RGB_DEFAULT_LAYER_HSV;
-  for (uint32_t i = 1; i < NUM_LAYERS - 1; i++)
+  for (uint32_t i = 1; i < MIGRATION_OLD_NUM_LAYERS - 1; i++)
     for (uint32_t j = 0; j < 3; j++)
       migration_assign_uint8_t(&dst, hsv[i][j]);
 #endif
@@ -693,6 +735,72 @@ bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
 
   // Copy the entire profile
   migration_memcpy(&dst, &src, MIGRATION_V1_11_PROFILE_CONFIG_SIZE);
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.11 -> v1.12 Migration (this fork: room for more profiles and layers,
+// advanced keys and macro nodes; the profiles and layers in use)
+//--------------------------------------------------------------------+
+
+bool v1_12_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x010B)
+    // Expected version v1.11
+    return false;
+
+  // Copy the entire global configuration
+  migration_memcpy(&dst, &src, MIGRATION_V1_11_GLOBAL_CONFIG_SIZE);
+#if defined(RGB_NUM_LEDS)
+  // Layer indicator colours of the new layers: the defaults
+  const uint8_t hsv[NUM_LAYERS - 1][3] = RGB_DEFAULT_LAYER_HSV;
+  for (uint32_t i = MIGRATION_OLD_NUM_LAYERS - 1; i < NUM_LAYERS - 1; i++)
+    for (uint32_t j = 0; j < 3; j++)
+      migration_assign_uint8_t(&dst, hsv[i][j]);
+#endif
+  // In use: the defaults, and never fewer than before
+  migration_assign_uint8_t(
+      &dst, M_MAX(MIGRATION_OLD_NUM_PROFILES, DEFAULT_ACTIVE_PROFILES));
+  migration_assign_uint8_t(
+      &dst, M_MAX(MIGRATION_OLD_NUM_LAYERS, DEFAULT_ACTIVE_LAYERS));
+
+  return true;
+}
+
+bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  const eeconfig_profile_t *def = eeconfig_default_profile(profile);
+
+  if (profile >= MIGRATION_OLD_NUM_PROFILES) {
+    // A new profile: the defaults
+    memcpy(dst, def, MIGRATION_V1_12_PROFILE_CONFIG_SIZE);
+    return true;
+  }
+
+  // Keymap: the old layers, then the new ones from the defaults
+  migration_memcpy(&dst, &src, MIGRATION_OLD_NUM_LAYERS * NUM_KEYS);
+  memcpy(dst, def->keymap[MIGRATION_OLD_NUM_LAYERS],
+         (NUM_LAYERS - MIGRATION_OLD_NUM_LAYERS) * NUM_KEYS);
+  dst += (NUM_LAYERS - MIGRATION_OLD_NUM_LAYERS) * NUM_KEYS;
+  // Actuation map
+  migration_memcpy(&dst, &src, NUM_KEYS * 4);
+  // Advanced keys: the old ones, then empty slots
+  migration_memcpy(&dst, &src,
+                   MIGRATION_OLD_NUM_ADVANCED_KEYS *
+                       MIGRATION_V1_5_ADVANCED_KEY_SIZE);
+  migration_memset(&dst, 0,
+                   (NUM_ADVANCED_KEYS - MIGRATION_OLD_NUM_ADVANCED_KEYS) *
+                       MIGRATION_V1_5_ADVANCED_KEY_SIZE);
+  // Macro nodes: the old ones, then empty nodes
+  migration_memcpy(&dst, &src,
+                   MIGRATION_OLD_NUM_MACRO_NODES *
+                       MIGRATION_V1_5_MACRO_NODE_SIZE);
+  for (uint32_t i = MIGRATION_OLD_NUM_MACRO_NODES; i < NUM_MACRO_NODES; i++) {
+    migration_memset(&dst, 0, 3);
+    migration_assign_uint8_t(&dst, MIGRATION_V1_5_MACRO_NODE_NONE);
+  }
+  // Gamepad buttons, gamepad options, tick rate
+  migration_memcpy(&dst, &src, NUM_KEYS + 9 + 1);
 
   return true;
 }

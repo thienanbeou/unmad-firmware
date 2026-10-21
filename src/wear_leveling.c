@@ -247,6 +247,53 @@ wear_leveling_write_raw(uint32_t addr, const void *buf, uint32_t len) {
   return WL_STATUS_OK;
 }
 
+#if defined(WL_LEGACY_VIRTUAL_SIZE)
+_Static_assert(WL_LEGACY_VIRTUAL_SIZE <= 8192 && WL_VIRTUAL_SIZE > 8192,
+               "The legacy layout is the one up to 8 KB, with 6-byte entries");
+
+/**
+ * @brief Read the store an older build left with a smaller virtual size
+ *
+ * Its CRC sits right after its data and its log entries hold up to 6 bytes
+ * (13-bit address, 3-bit length), so the current layout sees a bad CRC. The
+ * caller writes what this reads back in the current layout, once.
+ *
+ * @return Whether the legacy store was there (CRC good)
+ */
+static bool wear_leveling_read_legacy(void) {
+  wear_leveling_clear_cache();
+  uint32_t crc;
+  if (!wear_leveling_flash_read(0, wl_cache, WL_LEGACY_VIRTUAL_SIZE / 4) ||
+      !wear_leveling_flash_read(WL_LEGACY_VIRTUAL_SIZE, &crc, 1) ||
+      crc != crc32_compute(wl_cache, WL_LEGACY_VIRTUAL_SIZE, 0)) {
+    wear_leveling_clear_cache();
+    return false;
+  }
+
+  // Replay its log; a bad entry ends it (as the current replay does)
+  uint32_t addr = WL_LEGACY_VIRTUAL_SIZE + 4;
+  while (addr < WL_LEGACY_VIRTUAL_SIZE + WL_WRITE_LOG_SIZE) {
+    uint32_t raw[2];
+    if (!wear_leveling_flash_read(addr, &raw[0], 1) ||
+        raw[0] == FLASH_EMPTY_VAL)
+      break;
+    addr += 4;
+    const uint32_t entry_addr = raw[0] & 0x1FFF;
+    const uint32_t entry_len = (raw[0] >> 13) & 0x7;
+    if (entry_len == 0 || entry_len > 6 ||
+        entry_addr + entry_len > WL_LEGACY_VIRTUAL_SIZE)
+      break;
+    if (entry_len > 2) {
+      if (!wear_leveling_flash_read(addr, &raw[1], 1))
+        break;
+      addr += 4;
+    }
+    memcpy(wl_cache + entry_addr, (const uint8_t *)raw + 2, entry_len);
+  }
+  return true;
+}
+#endif
+
 void wear_leveling_init(void) {
   // Find the first sector from the end of the flash that is large enough to
   // hold the backing store
@@ -264,6 +311,11 @@ void wear_leveling_init(void) {
   wear_leveling_status_t status = wear_leveling_read_consolidated();
   if (status != WL_STATUS_FAILED)
     status = wear_leveling_replay_log();
+#if defined(WL_LEGACY_VIRTUAL_SIZE)
+  else if (wear_leveling_read_legacy())
+    // Settings from an older build: rewritten in the current layout
+    status = wear_leveling_consolidate_force();
+#endif
   else
     // If the consolidated data is corrupted, we clear the virtual storage
     status = wear_leveling_erase();

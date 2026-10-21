@@ -436,5 +436,26 @@ command(0xEA, 255, 255, 255)
 command(0xEC, 170, 255, 210)
 check("21 raw HID routes the lighting commands (GET_RGB, key colours, Caps, white balance, layer colour)", [], True)
 
+
+# Profiles and layers in use (v1.4): 4 and 6 at first, the configurator adds
+# more up to 8; out of range refused; fewer profiles than the current one's
+# index go back to profile 0 (current_profile sits at offset 134)
+def reply(*payload):
+    b.uc.mem_write(CMD_BUF, bytes(payload).ljust(64, b"\0"))
+    b.run(S["command_enqueue"], count=100_000, args=(CMD_BUF, 64))
+    b.run(S["command_task"], count=3_000_000)
+    b.uc.mem_write(S["command_response_pending"], b"\0")
+    return bytes(b.uc.mem_read(S["out_buf"], 3))
+
+
+first = reply(0xED)
+refused = [reply(0xEE, *v)[0] for v in ((0, 6), (4, 0), (9, 6), (4, 9))]
+grown = reply(0xEE, 8, 8)[0] == 0xEE and reply(0xED)[1:] == bytes([8, 8])
+b.uc.mem_write(b.r32(S["eeconfig"]) + 134, b"\x05")
+shrunk = reply(0xEE, 4, 6)[0] == 0xEE and reply(0xED)[1:] == bytes([4, 6])
+profile = b.uc.mem_read(b.r32(S["eeconfig"]) + 134, 1)[0]
+check(f"26 in use: first {list(first[1:])}, out of range refused, 8 x 8 set, back to 4 x 6 -> profile {profile}", [],
+      first[1:] == bytes([4, 6]) and refused == [0xFF] * 4 and grown and shrunk and profile == 0)
+
 print("all ok" if ok else "FAILED")
 sys.exit(0 if ok else 1)

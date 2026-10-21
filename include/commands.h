@@ -78,6 +78,11 @@ typedef enum {
   // Lighting: the layer indicator colour (src/rgb.c)
   COMMAND_GET_RGB_LAYER,
   COMMAND_SET_RGB_LAYER,
+  // Profiles and layers in use (v1.4): out / in: profiles, layers (1 to
+  // NUM_PROFILES / NUM_LAYERS; fewer profiles than the current one's index
+  // switch to profile 0)
+  COMMAND_GET_IN_USE,
+  COMMAND_SET_IN_USE,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
