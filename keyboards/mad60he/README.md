@@ -225,7 +225,10 @@ bootloader protocol and how they were found: [`NOTES.md`](NOTES.md).
 - Profiles and layers (v1.4): room for 8 profiles x 8 layers, with 40
   advanced keys and 160 macro steps per profile (v1.3: 4 x 4, 32 and 128).
   4 profiles and 6 layers are in use at first; the configurator's "+" next
-  to the layer buttons and "Add Profile" add more, up to 8 each (commands
+  to the layer buttons and "Add Profile" add more, up to 8 each, and the
+  trash / "Remove Profile" take the last one out again (cleared: a layer
+  goes back to transparent in every profile without its advanced keys, a
+  profile to its defaults; layer 0 and profile 0 always stay; commands
   0xED / 0xEE). 8 is the ceiling because the layer and profile keys (MO, TO,
   DF, OSL, PF) have 8 codes each. Upgrading from v1.3 or older keeps every
   setting (the settings area grows from 8 to 16 KB; the old one is read
